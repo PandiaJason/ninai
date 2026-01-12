@@ -154,19 +154,23 @@
 
 /* Collapsible Columns */
 /* Collapsible Columns */
+/* Collapsible Columns */
 .folders-sidebar.collapsed {
-    width: 24px;
+    width: 0;
     padding: 0;
     overflow: hidden;
     position: relative;
+    border: none;
+    /* Remove border when hidden */
 }
 
 .notes-list-col.collapsed {
-    width: 24px;
+    width: 0;
     padding: 0;
     overflow: hidden;
     position: relative;
-    border-right: 1px solid var(--border-subtle);
+    border: none;
+    /* Remove border when hidden */
 }
 
 .notes-list-col.expanded {

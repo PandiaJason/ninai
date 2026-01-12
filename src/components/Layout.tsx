@@ -27,26 +27,65 @@ export const Layout: React.FC<LayoutProps> = ({
     // const [isSidebarOpen, setIsSidebarOpen] = React.useState(true);
     // const [isNotesOpen, setIsNotesOpen] = React.useState(true);
 
+    const animationFrameRef = React.useRef<number | null>(null);
+    const panelRef = React.useRef<HTMLElement>(null);
+    const resizerRef = React.useRef<HTMLDivElement>(null);
+    const toggleRef = React.useRef<HTMLButtonElement>(null);
+    const widthRef = React.useRef(panelWidth);
+
     const startResizing = React.useCallback(() => {
         setIsResizing(true);
-    }, []);
+        widthRef.current = panelWidth;
+    }, [panelWidth]);
 
     const stopResizing = React.useCallback(() => {
         setIsResizing(false);
+        setPanelWidth(widthRef.current);
     }, []);
 
     const resize = React.useCallback(
         (mouseMoveEvent: MouseEvent) => {
-            if (isResizing) {
-                const newWidth = window.innerWidth - mouseMoveEvent.clientX;
-                // Constraints: Min 300px, Max 80% of screen
-                if (newWidth > 300 && newWidth < window.innerWidth * 0.8) {
-                    setPanelWidth(newWidth);
-                }
+            if (isResizing && panelRef.current) {
+                if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+
+                animationFrameRef.current = requestAnimationFrame(() => {
+                    const newWidth = window.innerWidth - mouseMoveEvent.clientX;
+                    if (newWidth > 300 && newWidth < window.innerWidth * 0.8) {
+                        widthRef.current = newWidth;
+
+                        // 1. Update Panel Width
+                        if (panelRef.current) {
+                            panelRef.current.style.width = `${newWidth}px`;
+                            const child = panelRef.current.firstElementChild as HTMLElement;
+                            if (child) child.style.minWidth = `${newWidth}px`;
+                        }
+
+                        // 2. Update Resizer Position (Right edge)
+                        if (resizerRef.current) {
+                            resizerRef.current.style.right = `${newWidth - 6}px`; // Center of 12px
+                        }
+
+                        // 3. Update Toggle Button Position
+                        if (toggleRef.current) {
+                            toggleRef.current.style.right = `${newWidth + 10}px`;
+                        }
+                    }
+                });
             }
         },
         [isResizing]
     );
+
+    // Sync Ref
+    React.useEffect(() => {
+        widthRef.current = panelWidth;
+    }, [panelWidth]);
+
+    React.useEffect(() => {
+        return () => {
+            if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+        };
+    }, []);
 
     React.useEffect(() => {
         window.addEventListener("mousemove", resize);
@@ -59,11 +98,8 @@ export const Layout: React.FC<LayoutProps> = ({
 
     return (
         <div className={`app-layout ${isResizing ? 'resizing' : ''} ${zenMode ? 'zen-mode' : ''}`}>
-            {/* Sidebar - Hidden in Zen Mode */}
             {!zenMode && (
-                <aside
-                    className={`layout-sidebar glass ${!isSidebarOpen ? 'collapsed' : ''}`}
-                >
+                <aside className={`layout-sidebar glass ${!isSidebarOpen ? 'collapsed' : ''}`}>
                     {sidebar}
                     <button
                         className="sidebar-toggle"
@@ -75,10 +111,8 @@ export const Layout: React.FC<LayoutProps> = ({
                 </aside>
             )}
 
-            {/* Main Content - Hidden in Zen Mode */}
             <main className={`layout-content ${zenMode ? 'hidden' : ''}`}>
                 {children}
-                {/* Left Toggle when collapsed - floating */}
                 {!isSidebarOpen && !zenMode && (
                     <button
                         className="sidebar-toggle-floating"
@@ -89,10 +123,18 @@ export const Layout: React.FC<LayoutProps> = ({
                 )}
             </main>
 
-            {/* Resizer - Hidden in Zen Mode */}
-            {!zenMode && isNotesOpen && <div className="resizer" onMouseDown={startResizing} />}
+            {/* Resizer - Absolute */}
+            {!zenMode && isNotesOpen && (
+                <div
+                    ref={resizerRef}
+                    className="resizer"
+                    onMouseDown={startResizing}
+                    style={{ right: panelWidth - 6 }} // Initial pos
+                />
+            )}
 
             <aside
+                ref={panelRef}
                 className={`layout-insight-panel glass ${!isNotesOpen ? 'collapsed' : ''} ${zenMode ? 'zen-full' : ''}`}
                 style={{ width: zenMode ? '100%' : (isNotesOpen ? panelWidth : 0) }}
             >
@@ -101,9 +143,9 @@ export const Layout: React.FC<LayoutProps> = ({
                 </div>
             </aside>
 
-            {/* Floating Toggle for Notes - Hidden in Zen Mode */}
             {!zenMode && (
                 <button
+                    ref={toggleRef}
                     className={`notes-toggle ${!isNotesOpen ? 'collapsed' : ''}`}
                     onClick={() => setNotesOpen(!isNotesOpen)}
                     style={{ right: isNotesOpen ? panelWidth + 10 : 10 }}

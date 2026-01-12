@@ -84,22 +84,36 @@
     user-select: none;
 }
 
+/* Resizer - Absolute positioned to avoid taking layout space */
 .resizer {
-    width: 8px;
-    height: 100%;
-    margin-left: -4px;
-    /* Center over the border line roughly */
-    margin-right: -4px;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 12px;
+    /* Slightly wider hit area for easier grabbing */
     cursor: col-resize;
-    z-index: 20;
-    transition: background 0.2s;
+    z-index: 100;
+    /* Above everything */
     background: transparent;
+    display: flex;
+    justify-content: center;
+    /* right: controlled by JS */
 }
 
-.resizer:hover,
-.app-layout.resizing .resizer {
+/* Visual Line (Ultra Thin) */
+.resizer::after {
+    content: '';
+    width: 1px;
+    /* Reduced to 1px as requested */
+    height: 100%;
     background: var(--accent-primary);
-    opacity: 0.5;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.resizer:hover::after,
+.app-layout.resizing .resizer::after {
+    opacity: 1;
 }
 
 /* PERFORMANCE: Disable transitions during drag for instant response */
@@ -107,8 +121,9 @@
     transition: none !important;
 }
 
-/* PERFORMANCE: Prevent iframes from stealing mouse events during resize */
-.app-layout.resizing iframe {
+/* PERFORMANCE: Prevent iframes/webviews from stealing mouse events during resize */
+.app-layout.resizing iframe,
+.app-layout.resizing webview {
     pointer-events: none;
 }
 
