@@ -2,6 +2,7 @@
   "name": "ninai",
   "private": true,
   "version": "0.9.37",
+  "license": "MIT",
   "author": "Jason P",
   "type": "module",
   "main": "electron/main.js",
