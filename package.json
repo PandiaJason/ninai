@@ -1,7 +1,7 @@
 {
   "name": "ninai",
   "private": true,
-  "version": "0.9.37",
+  "version": "1.0.0",
   "license": "MIT",
   "author": "Jason P",
   "type": "module",
