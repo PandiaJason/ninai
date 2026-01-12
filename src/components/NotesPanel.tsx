@@ -1,0 +1,931 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { useEditor, EditorContent } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import Placeholder from '@tiptap/extension-placeholder';
+import Image from '@tiptap/extension-image';
+import TaskList from '@tiptap/extension-task-list';
+import TaskItem from '@tiptap/extension-task-item';
+import Link from '@tiptap/extension-link';
+import { Markdown } from 'tiptap-markdown';
+import { db } from '../db';
+import type { Note } from '../db';
+import './NotesPanel.css';
+import { useDebounce } from '../hooks/useDebounce';
+import { FolderList } from './FolderList';
+
+interface NotesPanelProps {
+    zenMode?: boolean;
+    onToggleZenMode?: () => void;
+}
+
+export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggleZenMode }) => {
+
+    // --- DB Migration on Mount ---
+    useEffect(() => {
+        db.populateFromLocalStorage().catch(console.error);
+    }, []);
+
+
+    // --- Live Data ---
+    const folders = useLiveQuery(async () => {
+        const all = await db.folders.toArray();
+        return all.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    }) || [];
+    const notes = useLiveQuery(() => db.notes.orderBy('updatedAt').reverse().toArray()) || [];
+
+    const [activeFolderId, setActiveFolderId] = useState<string>('ninai');
+    const [activeNoteId, setActiveNoteId] = useState<string | null>(() => localStorage.getItem('ninai_active_note'));
+
+    useEffect(() => {
+        if (activeNoteId) localStorage.setItem('ninai_active_note', activeNoteId);
+    }, [activeNoteId]);
+
+    // --- Logic ---
+    const [searchTerm, setSearchTerm] = useState('');
+    const [showFolders, setShowFolders] = useState(true);
+    const [showList, setShowList] = useState(true);
+    const [showEditor, setShowEditor] = useState(true);
+    const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+    const [newFolderName, setNewFolderName] = useState('');
+
+    // --- Resizing Logic ---
+    // Optimized for "Split View" (50% screen): Smaller defaults to give Editor more space
+    const [folderWidth, setFolderWidth] = useState(200);
+    const [listWidth, setListWidth] = useState(220);
+    const isResizing = useRef<null | 'folder' | 'list'>(null);
+
+    useEffect(() => {
+        const handleMouseMove = (e: MouseEvent) => {
+            if (!isResizing.current) return;
+            // ... resizing logic same as before ...
+            if (isResizing.current === 'folder') {
+                const newW = e.clientX;
+                if (newW > 100 && newW < 600) setFolderWidth(newW);
+            } else if (isResizing.current === 'list') {
+                const sidebarEl = document.querySelector('.folders-sidebar') as HTMLElement;
+                const sidebarW = sidebarEl ? sidebarEl.getBoundingClientRect().width : 0;
+                const newW = e.clientX - sidebarW;
+                if (newW > 150 && newW < 800) setListWidth(newW);
+            }
+        };
+        const handleMouseUp = () => { isResizing.current = null; document.body.style.cursor = ''; document.body.style.userSelect = ''; };
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+        return () => { window.removeEventListener('mousemove', handleMouseMove); window.removeEventListener('mouseup', handleMouseUp); };
+    }, []);
+
+    // --- Auto-Collapse Logic (Responsive) ---
+    const panelRef = useRef<HTMLDivElement>(null);
+    const prevWidth = useRef<number>(0);
+
+    useEffect(() => {
+        if (!panelRef.current) return;
+
+        const ro = new ResizeObserver(entries => {
+            for (const entry of entries) {
+                const width = entry.contentRect.width;
+                // Only collapse if we CROSS the threshold downwards (e.g. 560 -> 540)
+                // OR if this is the *initial* check (prevWidth == 0) and we are very small (mobile).
+                // Lowered from 750 to 500 to allow 3-pane view in Desktop Split Screen (~700px).
+                if ((prevWidth.current === 0 || prevWidth.current > 500) && width <= 500) {
+                    setShowFolders(false);
+                }
+                // Auto-Expand if we CROSS a higher threshold upwards (e.g. 590 -> 610)
+                // Hysteresis: We start expanding at 600px to avoid flickering.
+                else if (prevWidth.current > 0 && prevWidth.current <= 600 && width > 600) {
+                    setShowFolders(true);
+                    setShowList(true); // Ensure 3-pane view is fully restored
+                }
+
+                prevWidth.current = width;
+            }
+        });
+
+        ro.observe(panelRef.current);
+        return () => ro.disconnect();
+    }, []); // Empty dependency array ensures we don't re-create the observer on state changes
+
+    const startResizing = (type: 'folder' | 'list') => (_e: React.MouseEvent) => {
+        isResizing.current = type;
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+    };
+
+    // Derived state for "Full Screen" (editor only) consistency
+    const isFullScreen = !showFolders && !showList && showEditor;
+    const toggleFullScreen = () => {
+        if (isFullScreen) {
+            // Restore to 3-Pane View (Folders + List + Editor)
+            // We relaxed the width check because users want 3-panes even in Split View (approx 700px).
+            // The CSS flex-shrink rules will handle the squeezing.
+            setShowFolders(true);
+            setShowList(true);
+        } else {
+            setShowFolders(false);
+            setShowList(false);
+            setShowEditor(true);
+        }
+    };
+
+    const filteredFolders = React.useMemo(() => folders.filter(f =>
+        f.name.toLowerCase().includes(searchTerm.toLowerCase())
+    ), [folders, searchTerm]);
+
+    const filteredNotes = React.useMemo(() => activeFolderId === 'all'
+        ? notes
+        : notes.filter(n => n.folderId === activeFolderId), [activeFolderId, notes]);
+
+    const searchResults = React.useMemo(() => searchTerm
+        ? notes.filter(n =>
+            n.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            n.content.toLowerCase().includes(searchTerm.toLowerCase())
+        )
+        : filteredFolders.length > 0 ? filteredNotes : [], [searchTerm, notes, filteredFolders.length, filteredNotes]);
+
+    const displayNotes = React.useMemo(() => searchTerm
+        ? searchResults
+        : filteredNotes, [searchTerm, searchResults, filteredNotes]);
+
+    const activeNote = React.useMemo(() => notes.find(n => n.id === activeNoteId), [notes, activeNoteId]);
+
+
+
+    // --- TipTap Editor Setup ---
+    const [isDirty, setIsDirty] = useState(false);
+
+    // Warn on close if saving
+    useEffect(() => {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (isDirty) {
+                e.preventDefault();
+                e.returnValue = 'Data is being saved. Please wait a moment.';
+                return e.returnValue;
+            }
+        };
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, [isDirty]);
+
+    // Debounce the DB update to prevent "slow type writer" latency
+    // 5000ms delay as requested by user to prevent frequent DB-triggered re-renders
+    const debouncedUpdateNote = useDebounce(async (id: string, updates: Partial<Note>) => {
+        // console.log("Saving note:", id, updates);
+        await db.notes.update(id, { ...updates, updatedAt: new Date() });
+        setIsDirty(false); // Saved
+    }, 800);
+
+    const updateNote = (field: 'title' | 'content', value: string) => {
+        if (!activeNoteId) return;
+
+        // Optimistic UI update (optional, but TipTap handles local state already)
+        // We just queue the DB save
+        // Optimistically update
+        // (Assuming setNotes is handling live query updates automatically via Dexie hook, if not we need manual local update)
+        // With Dexie useLiveQuery, we just write to DB. Debounce handles the write.
+        // For immediate feedback, we rely on the input field local state (localTitle).
+        setIsDirty(true);
+        debouncedUpdateNote(activeNoteId, { [field]: value });
+    };
+
+    // ...
+
+
+    const editor = useEditor({
+        extensions: [
+            StarterKit,
+            Markdown,
+            Image.configure({
+                inline: true,
+                allowBase64: true,
+            }),
+            Placeholder.configure({
+                placeholder: 'Start typing...',
+            }),
+            TaskList,
+            TaskItem.configure({
+                nested: true,
+            }),
+            Link.configure({
+                openOnClick: false,
+                autolink: true,
+            }),
+        ],
+        editorProps: {
+            attributes: {
+                class: 'markdown-preview-canvas focus:outline-none min-h-[50vh]',
+            },
+            handlePaste: (view, event) => {
+                const clipboardData = event.clipboardData;
+                if (!clipboardData) return false;
+
+                // --- Helper: Optimize Image ---
+                const optimizeImage = (blob: File | Blob): Promise<string> => {
+                    return new Promise((resolve, reject) => {
+                        const img = new window.Image();
+                        const url = URL.createObjectURL(blob);
+
+                        img.onload = () => {
+                            try {
+                                const canvas = document.createElement('canvas');
+                                const ctx = canvas.getContext('2d');
+                                // Max dimensions
+                                const MAX_WIDTH = 1200;
+                                const MAX_HEIGHT = 1200;
+                                let width = img.width;
+                                let height = img.height;
+
+                                if (width > height) {
+                                    if (width > MAX_WIDTH) {
+                                        height *= MAX_WIDTH / width;
+                                        width = MAX_WIDTH;
+                                    }
+                                } else {
+                                    if (height > MAX_HEIGHT) {
+                                        width *= MAX_HEIGHT / height;
+                                        height = MAX_HEIGHT;
+                                    }
+                                }
+
+                                canvas.width = width;
+                                canvas.height = height;
+                                ctx?.drawImage(img, 0, 0, width, height);
+
+                                const dataUrl = canvas.toDataURL('image/png');
+                                resolve(dataUrl);
+                            } catch (err) {
+                                reject(err);
+                            } finally {
+                                URL.revokeObjectURL(url);
+                            }
+                        };
+
+                        img.onerror = () => {
+                            URL.revokeObjectURL(url);
+                            reject(new Error("Failed to load image for optimization"));
+                        };
+
+                        img.src = url;
+                    });
+                };
+
+                const insertImage = async (blob: File | Blob) => {
+                    try {
+                        const optimizedParams = await optimizeImage(blob);
+                        view.dispatch(view.state.tr.replaceSelectionWith(
+                            view.state.schema.nodes.image.create({ src: optimizedParams })
+                        ));
+                    } catch (error) {
+                        console.warn("Image optimization failed, falling back to raw paste:", error);
+                        // Fallback: Read as Data URL directly
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                            if (typeof reader.result === 'string') {
+                                view.dispatch(view.state.tr.replaceSelectionWith(
+                                    view.state.schema.nodes.image.create({ src: reader.result })
+                                ));
+                            }
+                        };
+                        reader.readAsDataURL(blob);
+                    }
+                };
+
+                // 1. Check for files directly (e.g. screenshots, file copy)
+                if (clipboardData.files && clipboardData.files.length > 0) {
+                    const file = clipboardData.files[0];
+                    if (file.type.startsWith('image/')) {
+                        event.preventDefault();
+                        insertImage(file);
+                        return true;
+                    }
+                }
+
+                // 2. Check for items (e.g. browser context copy)
+                const items = clipboardData.items;
+                for (let i = 0; i < items.length; i++) {
+                    if (items[i].type.startsWith('image/')) {
+                        const blob = items[i].getAsFile();
+                        if (blob) {
+                            event.preventDefault();
+                            insertImage(blob);
+                            return true;
+                        }
+                    }
+                }
+
+                // 3. Fallback: Check for HTML <img> tag (Copy Image URL case)
+                const html = clipboardData.getData('text/html');
+                if (html) {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    const img = doc.querySelector('img');
+                    if (img && img.src) {
+                        event.preventDefault();
+                        // Attempt to fetch and inline logic remains similar, but using optimizeImage
+                        fetch(img.src)
+                            .then(res => res.blob())
+                            .then(insertImage)
+                            .catch(() => {
+                                view.dispatch(view.state.tr.replaceSelectionWith(
+                                    view.state.schema.nodes.image.create({ src: img.src })
+                                ));
+                            });
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+        },
+        onUpdate: ({ editor }) => {
+            // Store HTML for full fidelity (images, data-uris, custom nodes)
+            // Markdown serialization is lossy for complex nodes like Data-URI images unless strictly configured.
+            const html = editor.getHTML();
+            updateNote('content', html);
+        },
+    });
+
+    // Content Sync Logic
+    const previousNoteIdRef = useRef<string | null>(null);
+    const [localTitle, setLocalTitle] = useState('');
+
+    useEffect(() => {
+        if (!editor || !activeNote) return;
+
+        // Only update editor content if we switched notes
+        if (activeNote.id !== previousNoteIdRef.current) {
+            // Sync Title
+            setLocalTitle(activeNote.title);
+
+            // Sync Content
+            editor.commands.setContent(activeNote.content);
+            previousNoteIdRef.current = activeNote.id;
+        }
+    }, [activeNote, editor]);
+
+
+    // Formatting Helpers
+    const toggleFormat = (type: string) => {
+        if (!editor) return;
+        editor.chain().focus();
+        switch (type) {
+            case 'bold': editor.chain().focus().toggleBold().run(); break;
+            case 'italic': editor.chain().focus().toggleItalic().run(); break;
+            case 'h1': editor.chain().focus().toggleHeading({ level: 1 }).run(); break;
+            case 'h2': editor.chain().focus().toggleHeading({ level: 2 }).run(); break;
+            case 'bullet': editor.chain().focus().toggleBulletList().run(); break;
+            case 'check': editor.chain().focus().toggleTaskList().run(); break;
+            case 'code': editor.chain().focus().toggleCodeBlock().run(); break;
+        }
+    };
+
+    const addImage = () => {
+        const url = window.prompt('Image URL');
+        if (url && editor) {
+            editor.chain().focus().setImage({ src: url }).run();
+        }
+    };
+
+    // --- CRUD ---
+    const createNote = async () => {
+        const targetFolder = activeFolderId === 'all' ? 'ninai' : activeFolderId;
+        const newId = Date.now().toString();
+        const newNote: Note = {
+            id: newId,
+            folderId: targetFolder,
+            title: '',
+            content: '', // Empty HTML
+            updatedAt: new Date()
+        };
+        await db.notes.add(newNote);
+        setActiveNoteId(newId);
+    };
+
+    // Focus Management for Folder Creation
+    const folderInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (isCreatingFolder && folderInputRef.current) {
+            folderInputRef.current.focus();
+        }
+    }, [isCreatingFolder]);
+
+    const createFolder = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!showFolders) setShowFolders(true); // Ensure sidebar is visible
+        setIsCreatingFolder(true);
+    };
+
+    const confirmCreateFolder = async () => {
+        if (newFolderName.trim()) {
+            const newId = Date.now().toString();
+            await db.folders.add({
+                id: newId,
+                name: newFolderName,
+                icon: 'Folder'
+            });
+            setActiveFolderId(newId); // Auto-navigate to new folder
+            setNewFolderName('');
+            setIsCreatingFolder(false);
+        } else {
+            setIsCreatingFolder(false);
+        }
+    };
+
+    const deleteNote = async (noteId?: string) => {
+        const idToDelete = noteId || activeNoteId;
+        if (!idToDelete) return;
+        // if (confirm('Delete this note?')) { // Removing blocking confirm for Desktop
+        await db.notes.delete(idToDelete);
+        if (activeNoteId === idToDelete) setActiveNoteId(null);
+        // }
+    };
+
+    const deleteFolder = async (id: string) => {
+        if (id === 'all' || id === 'ninai') {
+            alert("Cannot delete default folders.");
+            return;
+        }
+        if (confirm('Delete this folder and its notes?')) {
+            await db.folders.delete(id);
+            await db.notes.where('folderId').equals(id).delete();
+            if (activeFolderId === id) setActiveFolderId('ninai');
+        }
+    };
+
+    const downloadMarkdown = () => {
+        if (!activeNote || !editor) return;
+        const title = activeNote.title || 'Untitled Note';
+        // Use the Editor's Markdown Serializer to convert current state (HTML/Nodes) to Markdown
+        const markdownContent = (editor.storage as any).markdown.getMarkdown();
+
+        const element = document.createElement("a");
+        const file = new Blob([`# ${title}\n\n${markdownContent}`], { type: 'text/markdown' });
+        element.href = URL.createObjectURL(file);
+        element.download = `${title.replace(/\s+/g, '_')}.md`;
+        document.body.appendChild(element);
+        element.click();
+        document.body.removeChild(element);
+    };
+
+    // Context Menus
+    const [noteMenu, setNoteMenu] = useState<{ x: number, y: number, noteId: string } | null>(null);
+
+    useEffect(() => {
+        const closeMenu = () => { setNoteMenu(null); }; // Folder menu handled by FolderList, remove global closure for it?
+        // Actually FolderList might use local state but we should clear it on global click likely.
+        // For now sticking to simple:
+        window.addEventListener('click', closeMenu);
+        return () => window.removeEventListener('click', closeMenu);
+    }, []);
+
+    const handleNoteContextMenu = (e: React.MouseEvent, noteId: string) => {
+        e.preventDefault();
+        setNoteMenu({ x: e.clientX, y: e.clientY, noteId });
+    };
+
+    // --- Move Item Logic (Notes & Folders) ---
+    const [moveTarget, setMoveTarget] = useState<{ type: 'note' | 'folder', id: string } | null>(null);
+    const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
+
+    const handleMoveFolder = async (activeId: string, overId: string) => {
+        const active = folders.find(f => f.id === activeId);
+        const over = folders.find(f => f.id === overId);
+        if (active && over && active.parentId === over.parentId) {
+            // Swap orders for now
+            const tempOrder = active.order;
+            await db.folders.update(activeId, { order: over.order });
+            await db.folders.update(overId, { order: tempOrder });
+        }
+    };
+
+    const handleMoveItem = async (targetId: string) => {
+        if (!moveTarget) return;
+
+        if (moveTarget.type === 'note') {
+            await db.notes.update(moveTarget.id, { folderId: targetId });
+        } else {
+            // Folder Move: Check for circular dependency
+            // We can't move a folder into itself or its children
+            // Simple check: traverse up from targetId. If we hit moveTarget.id, it's invalid.
+            let current = folders.find(f => f.id === targetId);
+            let invalid = false;
+            while (current) {
+                if (current.id === moveTarget.id) {
+                    invalid = true;
+                    break;
+                }
+                if (!current.parentId) break;
+                current = folders.find(f => f.id === current?.parentId);
+            }
+
+            if (invalid) {
+                alert("Cannot move a folder into its own subfolder.");
+                return;
+            }
+
+            // Also prevents moving to self (targetId === moveTarget.id) caught above or implicitly valid but no-op?
+            if (targetId === moveTarget.id) return; // No-op
+
+            await db.folders.update(moveTarget.id, { parentId: targetId === 'root' ? undefined : targetId });
+        }
+        setMoveTarget(null);
+    };
+
+    // Better: Build a flat list with depth for the select options
+    const folderOptions = React.useMemo(() => {
+        const list: { id: string, name: string, depth: number }[] = [];
+        const traverse = (pid: string | undefined, depth: number) => {
+            const children = folders.filter(f => (f.parentId || 'root') === (pid || 'root')).sort((a, b) => (a.order || 0) - (b.order || 0));
+            children.forEach(f => {
+                if (f.id !== 'all') { // Cannot move into 'all' pseudo-folder
+                    list.push({ id: f.id, name: f.name, depth });
+                    traverse(f.id, depth + 1);
+                }
+            });
+        };
+        // Add minimal Root option if moving folders to top level?
+        // Or "My Notes" (ninai) is the root?
+        // Let's allow moving to 'ninai' (which is default root-like).
+        // Actually 'ninai' folder exists in DB? Yes.
+        // What about top-level?
+        // In our schema, everything is usually in a folder. 'ninai' is the default folder.
+        // Let's just traverse.
+        traverse(undefined, 0);
+        return list;
+    }, [folders]);
+
+
+    // Prepare note counts
+    const noteCounts = React.useMemo(() => {
+        const counts: { [key: string]: number } = {};
+        counts['all'] = notes.length;
+        folders.forEach(f => {
+            counts[f.id] = notes.filter(n => n.folderId === f.id).length;
+        });
+        return counts;
+    }, [notes, folders]);
+
+    return (
+        <div className="notes-panel" ref={panelRef}>
+            {/* 1. Folders Sidebar */}
+            <div
+                className={`folders-sidebar ${!showFolders ? 'collapsed' : ''}`}
+                style={{ width: showFolders ? folderWidth : undefined }}
+            >
+                <header className="notes-header-minimal">
+                    <span className="folder-title-display">Folders</span>
+                    <button className="icon-btn-ghost" onClick={createFolder} title="New Folder">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                            <line x1="12" y1="11" x2="12" y2="17"></line>
+                            <line x1="9" y1="14" x2="15" y2="14"></line>
+                        </svg>
+                    </button>
+                </header>
+
+
+
+                <div className="folders-list-container">
+                    {isCreatingFolder && (
+                        <div className="folder-item active" style={{ cursor: 'default', margin: '0 12px' }}>
+                            <span className="folder-icon">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                            </span>
+                            <input
+                                ref={folderInputRef}
+                                autoFocus
+                                className="folder-input-inline"
+                                value={newFolderName}
+                                onChange={(e) => setNewFolderName(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') confirmCreateFolder();
+                                    if (e.key === 'Escape') setIsCreatingFolder(false);
+                                }}
+                                placeholder="Name..."
+                            />
+                        </div>
+                    )}
+
+                    {searchTerm && <div className="section-label">Results</div>}
+
+                    <FolderList
+                        folders={filteredFolders}
+                        activeFolderId={activeFolderId}
+                        onSelectFolder={setActiveFolderId}
+                        onRenameFolder={async (id, name) => {
+                            await db.folders.update(id, { name });
+                        }}
+                        onDeleteFolder={deleteFolder}
+                        onMoveFolder={handleMoveFolder}
+                        onCreateSubfolder={async (parentId) => {
+                            const newId = Date.now().toString();
+                            await db.folders.add({
+                                id: newId,
+                                name: 'New Subfolder',
+                                parentId: parentId,
+                                order: 999, // Append to end
+                                icon: 'Folder'
+                            });
+                            setActiveFolderId(newId);
+                        }}
+                        onRequestMove={(folderId) => setMoveTarget({ type: 'folder', id: folderId })}
+                        noteCounts={noteCounts}
+                        editingFolderId={editingFolderId}
+                        setEditingFolderId={setEditingFolderId}
+                    />
+                </div>
+
+                {zenMode ? (
+                    <button className="column-toggle-collapsed" onClick={onToggleZenMode}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 5l7 7-7 7" /><path d="M5 5l7 7-7 7" /></svg>
+                    </button>
+                ) : (
+                    <button className="column-toggle" onClick={onToggleZenMode}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 19l-7-7 7-7" /><path d="M19 19l-7-7 7-7" /></svg>
+                    </button>
+                )}
+
+                {/* Resizer Handle */}
+                {showFolders && <div className="panel-resizer" onMouseDown={startResizing('folder')} />}
+            </div>
+
+            {/* 2. Notes List */}
+            <div
+                className={`notes-list-col ${!showList ? 'collapsed' : ''} ${!showEditor ? 'expanded' : ''}`}
+                style={{ width: showList && showEditor ? listWidth : undefined }}
+            >
+                {showList && (
+                    <>
+                        <header className="notes-header-minimal">
+                            <span className="folder-title-display">{folders.find(f => f.id === activeFolderId)?.name || 'All Notes'}</span>
+                            <button className="icon-btn-primary" onClick={createNote} title="New Note">
+                                {/* Compose Icon (Square with Pencil) */}
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                </svg>
+                            </button>
+                        </header>
+                        <div style={{ padding: '0 8px 12px' }}>
+                            <div className="search-wrapper">
+                                <span className="search-icon">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                </span>
+                                <input
+                                    className="notes-search-bar"
+                                    placeholder="Search"
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                />
+                            </div>
+                        </div>
+                    </>
+                )}
+                {showList && (
+                    <div className="notes-scroller">
+                        {(() => {
+                            const now = new Date();
+                            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                            const yesterday = new Date(today);
+                            yesterday.setDate(yesterday.getDate() - 1);
+                            const last7Days = new Date(today);
+                            last7Days.setDate(last7Days.getDate() - 7);
+                            const last30Days = new Date(today);
+                            last30Days.setDate(last30Days.getDate() - 30);
+
+                            const groups: { [key: string]: typeof displayNotes } = {};
+                            const groupOrder: string[] = [];
+
+                            displayNotes.forEach(note => {
+                                const noteDate = new Date(note.updatedAt);
+                                const dateOnly = new Date(noteDate.getFullYear(), noteDate.getMonth(), noteDate.getDate());
+
+                                let groupName = '';
+                                if (dateOnly.getTime() === today.getTime()) {
+                                    groupName = 'Today';
+                                } else if (dateOnly.getTime() === yesterday.getTime()) {
+                                    groupName = 'Yesterday';
+                                } else if (dateOnly > last7Days) {
+                                    groupName = 'Previous 7 Days';
+                                } else if (dateOnly > last30Days) {
+                                    groupName = 'Previous 30 Days';
+                                } else {
+                                    groupName = noteDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                                }
+
+                                if (!groups[groupName]) {
+                                    groups[groupName] = [];
+                                    groupOrder.push(groupName);
+                                }
+                                groups[groupName].push(note);
+                            });
+
+                            if (displayNotes.length === 0) {
+                                return (
+                                    <div className="empty-state" style={{ padding: '40px 20px', textAlign: 'center', opacity: 0.5 }}>
+                                        No notes found
+                                    </div>
+                                );
+                            }
+
+                            return groupOrder.map(group => (
+                                <div key={group} className="notes-group">
+                                    <h5 className="notes-group-header">{group}</h5>
+                                    {groups[group].map(note => (
+                                        <div
+                                            key={note.id}
+                                            className={`note-preview-card ${activeNoteId === note.id ? 'active' : ''}`}
+                                            onClick={() => {
+                                                setActiveNoteId(note.id);
+                                                if (!showEditor) setShowEditor(true);
+                                                // Auto-Collapse Folders/List on Selection in Split View (Narrow Screen)
+                                                // Threshold: < 1000px matches the "Laptop Split" scenario
+                                                if (panelRef.current?.getBoundingClientRect().width! < 1000) {
+                                                    setShowFolders(false);
+                                                    setShowList(false);
+                                                }
+                                            }}
+                                            onContextMenu={(e) => handleNoteContextMenu(e, note.id)}
+                                        >
+                                            <h4 className="note-preview-title">{note.title || 'New Note'}</h4>
+                                            <div className="note-preview-meta">
+                                                <span className="note-time">
+                                                    {note.updatedAt.toLocaleDateString([], { month: 'numeric', day: 'numeric' })}
+                                                </span>
+                                                <p className="note-preview-text">
+                                                    {(() => {
+                                                        const tmp = document.createElement('DIV');
+                                                        tmp.innerHTML = note.content;
+                                                        return tmp.textContent || tmp.innerText || 'No additional text';
+                                                    })().slice(0, 100)}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ));
+                        })()}
+                    </div>
+                )}
+                {noteMenu && (
+                    <>
+                        <div className="context-menu-backdrop" onClick={() => setNoteMenu(null)} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />
+                        <div className="context-menu" style={{ top: noteMenu.y, left: noteMenu.x, zIndex: 100 }}>
+                            <button onClick={() => { setMoveTarget({ type: 'note', id: noteMenu.noteId }); setNoteMenu(null); }} className="menu-item">Move to...</button>
+                            <div className="menu-divider" />
+                            <button onClick={() => deleteNote(noteMenu.noteId)} className="menu-item delete">Delete Note</button>
+                        </div>
+                    </>
+                )}
+
+                {/* Resizer Handle */}
+                {showList && showEditor && <div className="panel-resizer" onMouseDown={startResizing('list')} />}
+            </div>
+
+            {/* 3. Editor Stage */}
+            {showEditor && (
+                <div className="editor-stage">
+                    {activeNote ? (
+                        <>
+                            <div className="editor-toolbar-clean">
+                                <span className="last-edited">
+                                    {isDirty ? 'Saving in background...' : `Last edited ${activeNote.updatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
+                                </span>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    {/* Focus Mode (Expand Editor) */}
+                                    <button
+                                        className={`icon-btn-primary ${isFullScreen ? 'active' : ''}`}
+                                        onClick={toggleFullScreen}
+                                        title={isFullScreen ? "Exit Focus Mode" : "Focus Mode (Hide Sidebar)"}
+                                    >
+                                        {isFullScreen ?
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" /></svg>
+                                            :
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></svg>
+                                        }
+                                    </button>
+
+                                    {/* Zen Mode (Hide Browser) */}
+                                    <button
+                                        className={`icon-btn-primary ${zenMode ? 'active' : ''}`}
+                                        onClick={onToggleZenMode}
+                                        title={zenMode ? "Show Browser" : "Zen Mode (Hide Browser)"}
+                                    >
+                                        {zenMode ?
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>
+                                            :
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
+                                        }
+                                    </button>
+
+                                    <div className="toolbar-divider" style={{ height: '16px', margin: '0 8px' }} />
+
+                                    {/* Delete Note Button - Explicitly wired */}
+                                    <button
+                                        className="icon-btn-ghost"
+                                        onClick={() => deleteNote(activeNote?.id)}
+                                        title="Delete Note"
+                                    >
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                    </button>
+                                    <button className="action-link" onClick={downloadMarkdown}>Export</button>
+                                </div>
+                            </div>
+
+                            <div className="editor-canvas">
+                                <input
+                                    className="clean-title-input"
+                                    value={localTitle}
+                                    onChange={(e) => {
+                                        setLocalTitle(e.target.value);
+                                        updateNote('title', e.target.value);
+                                    }}
+                                    placeholder="Title"
+                                />
+
+                                {/* TipTap Toolbar */}
+                                <div className="formatting-toolbar">
+                                    <button onClick={() => toggleFormat('bold')} className={editor?.isActive('bold') ? 'active' : ''} title="Bold"><b>B</b></button>
+                                    <button onClick={() => toggleFormat('italic')} className={editor?.isActive('italic') ? 'active' : ''} title="Italic"><i>I</i></button>
+                                    <div className="toolbar-divider" />
+                                    <button onClick={() => toggleFormat('h1')} className={editor?.isActive('heading', { level: 1 }) ? 'active' : ''}>H1</button>
+                                    <button onClick={() => toggleFormat('h2')} className={editor?.isActive('heading', { level: 2 }) ? 'active' : ''}>H2</button>
+                                    <div className="toolbar-divider" />
+                                    <button onClick={() => toggleFormat('bullet')} className={editor?.isActive('bulletList') ? 'active' : ''}>•</button>
+                                    <button onClick={() => toggleFormat('check')} className={editor?.isActive('taskList') ? 'active' : ''}>☑</button>
+                                    <button onClick={() => toggleFormat('code')} className={editor?.isActive('codeBlock') ? 'active' : ''}>{'<>'}</button>
+                                    <button onClick={addImage} title="Add Image">Img</button>
+                                </div>
+
+                                <div className="editor-content-area">
+                                    <EditorContent editor={editor} />
+                                </div>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="empty-stage">
+                            <div className="empty-icon">
+                                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                    <polyline points="14 2 14 8 20 8" />
+                                    <line x1="16" y1="13" x2="8" y2="13" />
+                                    <line x1="16" y1="17" x2="8" y2="17" />
+                                    <polyline points="10 9 9 9 8 9" />
+                                </svg>
+                            </div>
+                            <p>Select a note to start writing</p>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {!showEditor && (
+                <div className="editor-collapsed-handle">
+                    <button className="column-toggle-collapsed" onClick={() => setShowEditor(true)}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 19l-7-7 7-7m8 14l-7-7 7-7" /></svg>
+                    </button>
+                </div>
+            )}
+
+            {/* Move Modal */}
+            {moveTarget && (
+                <div className="modal-backdrop" onClick={() => setMoveTarget(null)}>
+                    <div className="modal-content" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h3>Move {moveTarget.type === 'note' ? 'Note' : 'Folder'}</h3>
+                        </div>
+                        <div className="folder-select-list">
+                            <button
+                                className={`folder-select-item ${activeFolderId === 'ninai' ? 'active' : ''}`}
+                                onClick={() => handleMoveItem('ninai')}
+                            >
+                                <span className="folder-icon">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                                </span> Home (NINAI)
+                            </button>
+                            {folderOptions.map(f => (
+                                <button
+                                    key={f.id}
+                                    className="folder-select-item"
+                                    style={{ paddingLeft: `${f.depth * 20 + 12}px` }}
+                                    onClick={() => handleMoveItem(f.id)}
+                                    disabled={moveTarget.type === 'folder' && moveTarget.id === f.id}
+                                >
+                                    {f.depth > 0 ? '' : ''}<span className="folder-icon">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                                    </span> {f.name}
+                                </button>
+                            ))}
+                            <div className="modal-actions">
+                                <button className="close-btn" onClick={() => setMoveTarget(null)}>Cancel</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+

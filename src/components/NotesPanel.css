@@ -1,0 +1,963 @@
+.notes-panel {
+    display: flex;
+    height: 100%;
+    width: 100%;
+    background: var(--bg-app);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", sans-serif;
+}
+
+/* 1. Folders Sidebar */
+.folders-sidebar {
+    /* width: 200px; - REMOVED: Managed by inline style */
+    background: var(--bg-sidebar);
+    /* Apple Aluminum */
+    border-right: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    padding-top: 40px;
+    position: relative;
+    /* For resizer positioning */
+    flex-shrink: 0;
+    /* Don't shrink below set width */
+}
+
+/* ... existing sidebar styles ... */
+/* ... */
+
+/* 2. Notes List */
+.notes-list-col {
+    /* width: 250px; - REMOVED: Managed by inline style */
+    background: var(--surface-low);
+    /* White */
+    border-right: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    /* For resizer positioning */
+    flex-shrink: 0;
+}
+
+/* Resizer Handle */
+.panel-resizer {
+    position: absolute;
+    top: 0;
+    right: -4px;
+    /* Straddle the border */
+    width: 8px;
+    /* Hit area */
+    height: 100%;
+    z-index: 10;
+    cursor: col-resize;
+    transition: background 0.2s;
+}
+
+.panel-resizer:hover {
+    background: rgba(0, 0, 0, 0.1);
+    /* Visual feedback */
+}
+
+.notes-header-minimal {
+    height: 52px;
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.folder-title-display {
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: var(--text-primary);
+}
+
+.icon-btn-primary {
+    background: none;
+    border: none;
+    font-size: 1.1rem;
+    cursor: pointer;
+    color: var(--accent-primary);
+    opacity: 0.9;
+    padding: 6px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.1s, background 0.1s;
+    -webkit-app-region: no-drag;
+    /* CRITICAL: Allow clicking in drag region */
+}
+
+.icon-btn-primary:hover {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.icon-btn-ghost {
+    background: none;
+    border: none;
+    color: var(--accent-primary);
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.1s;
+    -webkit-app-region: no-drag;
+    /* CRITICAL: Allow clicking in drag region */
+}
+
+.icon-btn-ghost:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.notes-scroller {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 12px 12px;
+    margin-bottom: 2px;
+}
+
+.notes-group {
+    margin-bottom: 16px;
+}
+
+.notes-group-header {
+    padding: 0 14px 4px 14px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    user-select: none;
+}
+
+.note-preview-card {
+    padding: 12px 14px;
+    border-radius: var(--radius-md);
+    margin-bottom: 4px;
+    cursor: pointer;
+    background: transparent;
+    transition: all 0.1s ease;
+}
+
+.note-preview-card:hover {
+    background: var(--bg-sidebar);
+}
+
+.note-preview-card.active {
+    background: var(--surface-low);
+    /* Stay white but add shadow/border */
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    border: 1px solid var(--border-subtle);
+}
+
+/* Collapsible Columns */
+/* Collapsible Columns */
+.folders-sidebar.collapsed {
+    width: 24px;
+    padding: 0;
+    overflow: hidden;
+    position: relative;
+}
+
+.notes-list-col.collapsed {
+    width: 24px;
+    padding: 0;
+    overflow: hidden;
+    position: relative;
+    border-right: 1px solid var(--border-subtle);
+}
+
+.notes-list-col.expanded {
+    flex: 1;
+    overflow-y: auto;
+    /* Smooth Scroll */
+    scroll-behavior: smooth;
+}
+
+.editor-collapsed-handle {
+    width: 24px;
+    background: var(--surface-low);
+    border-left: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column-reverse;
+}
+
+.column-toggles-container {
+    display: flex;
+    width: 100%;
+    margin-top: auto;
+    border-top: 1px solid var(--border-subtle);
+}
+
+.column-toggle {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.2rem;
+    color: var(--text-tertiary);
+    padding: 8px 0;
+    transition: color 0.1s;
+}
+
+.column-toggle:hover {
+    color: var(--accent-primary);
+}
+
+.column-toggle-half {
+    flex: 1;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.2rem;
+    color: var(--text-tertiary);
+    padding: 8px 0;
+    transition: all 0.1s;
+}
+
+.column-toggle-half:hover {
+    color: var(--accent-primary);
+    background: rgba(0, 0, 0, 0.03);
+}
+
+.column-toggle-collapsed {
+    width: 100%;
+    height: 100%;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-tertiary);
+    font-size: 1.2rem;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 8px;
+}
+
+.folder-item {
+    display: flex;
+    align-items: center;
+    padding: 6px 10px 6px 4px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    transition: background 0.1s;
+    user-select: none;
+    margin-right: 8px;
+}
+
+.folder-item:hover {
+    background: rgba(0, 0, 0, 0.04);
+}
+
+.folder-item.active {
+    background: rgba(0, 0, 0, 0.06);
+    /* Revert to subtle gray selection */
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+/* Revert icon colors */
+.folder-item.active .folder-icon,
+.folder-item.active .folder-name,
+.folder-item.active .folder-count,
+.folder-item.active .folder-chevron,
+.folder-item.active .folder-chevron svg {
+    color: var(--text-primary);
+    opacity: 1;
+    stroke: currentColor;
+    fill: none;
+}
+
+/* Exception: Fill for specific SVG if active? No, Outline style preferred by user usually */
+
+.folder-chevron {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-tertiary);
+    transition: transform 0.2s ease;
+    opacity: 0;
+    pointer-events: none;
+    margin-right: 2px;
+}
+
+.folder-chevron.visible {
+    opacity: 1;
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+.folder-chevron.visible:hover {
+    color: var(--text-primary);
+}
+
+.folder-chevron.collapsed {
+    transform: rotate(-90deg);
+}
+
+.folder-input-inline {
+    border: none;
+    background: transparent;
+    width: 100%;
+    outline: none;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    font-family: inherit;
+}
+
+.folder-icon {
+    margin-right: 6px;
+    display: flex;
+    align-items: center;
+    color: var(--text-secondary);
+}
+
+.folder-name {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.3;
+}
+
+.folder-count {
+    font-size: 0.8rem;
+    color: var(--text-tertiary);
+    margin-left: 8px;
+}
+
+.folder-delete-btn {
+    display: none;
+    background: none;
+    border: none;
+    color: var(--text-tertiary);
+    font-size: 1.2rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 4px;
+    margin-right: 4px;
+}
+
+.folder-rename-input {
+    flex: 1;
+    background: var(--bg-app);
+    border: 1px solid var(--accent-primary);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    outline: none;
+    margin-right: 8px;
+}
+
+.folder-delete-btn:hover {
+    color: var(--accent-danger);
+}
+
+.folder-item:hover .folder-delete-btn {
+    display: block;
+    /* Show on hover */
+}
+
+.column-toggle-collapsed:hover {
+    color: var(--accent-primary);
+    background: rgba(0, 0, 0, 0.02);
+}
+
+/* Full Screen Mode Helper */
+.notes-panel.full-screen .editor-stage {
+    max-width: 100%;
+}
+
+/* 3. Editor Stage */
+.editor-stage {
+    flex: 1;
+    background: var(--surface-low);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+    /* Prevent stage from growing */
+    /* Reduced min-width to prevent squashing other columns in Split View */
+    min-width: 200px;
+    /* CRITICAL: Prevent squashing */
+}
+
+
+.editor-toolbar-clean {
+    height: 52px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 32px;
+    color: var(--text-tertiary);
+    font-size: 0.75rem;
+    -webkit-app-region: drag;
+    /* Acts as title bar */
+}
+
+.action-link {
+    background: none;
+    border: none;
+    color: var(--accent-primary);
+    font-weight: 500;
+    cursor: pointer;
+    font-size: 0.8rem;
+    -webkit-app-region: no-drag;
+    /* Clickable */
+}
+
+.action-link:hover {
+    text-decoration: underline;
+}
+
+.editor-canvas {
+    flex: 1;
+    max-width: 700px;
+    margin: 0 auto;
+    width: 100%;
+    padding: 0 32px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    /* Ensure canvas fits in stage */
+    min-height: 0;
+    /* Crucial for nested flex scroll */
+}
+
+.clean-title-input {
+    width: 100%;
+    border: none;
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    background: transparent;
+    outline: none;
+    padding: 16px 0;
+    margin-bottom: 8px;
+}
+
+.clean-body-input {
+    flex: 1;
+    width: 100%;
+    border: none;
+    font-size: 1.05rem;
+    line-height: 1.6;
+    color: var(--text-primary);
+    background: transparent;
+    outline: none;
+    resize: none;
+    padding-bottom: 40px;
+}
+
+.editor-content-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    /* Scroller moves to container */
+}
+
+.clean-body-input {
+    flex: 1;
+    /* Take full height */
+    min-height: 50vh;
+}
+
+.markdown-preview-canvas {
+    flex: 1;
+    padding: 12px 2px;
+    font-size: 1.05rem;
+    /* Slightly larger for reading */
+    line-height: 1.6;
+    color: var(--text-primary);
+    cursor: text;
+    white-space: pre-wrap;
+}
+
+/* --- Premium Markdown Typography --- */
+.markdown-preview-canvas h1 {
+    font-size: 2em;
+    font-weight: 700;
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+}
+
+.markdown-preview-canvas h1:first-child {
+    margin-top: 0;
+}
+
+.markdown-preview-canvas h2 {
+    font-size: 1.5em;
+    font-weight: 600;
+    margin-top: 1.4em;
+    margin-bottom: 0.5em;
+    letter-spacing: -0.01em;
+}
+
+.markdown-preview-canvas h3 {
+    font-size: 1.25em;
+    font-weight: 600;
+    margin-top: 1.2em;
+    margin-bottom: 0.4em;
+}
+
+.markdown-preview-canvas p {
+    margin-bottom: 1em;
+}
+
+/* --- Rich Elements --- */
+
+/* Blockquote - Notion Style */
+.markdown-preview-canvas blockquote {
+    border-left: 3px solid var(--text-primary);
+    margin: 1em 0;
+    padding-left: 1em;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+/* Code - GitHub/Notion Style */
+.markdown-preview-canvas code {
+    font-family: 'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
+    font-size: 0.9em;
+    background: rgba(0, 0, 0, 0.06);
+    padding: 0.2em 0.4em;
+    border-radius: 4px;
+    color: #d12f2f;
+    /* Red hue for inline code */
+}
+
+.markdown-preview-canvas pre {
+    background: #f6f8fa;
+    /* Light mode GitHub bg */
+    padding: 16px;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin: 1em 0;
+    border: 1px solid var(--border-subtle);
+}
+
+.markdown-preview-canvas pre code {
+    background: none;
+    padding: 0;
+    color: var(--text-primary);
+    border-radius: 0;
+    display: block;
+    /* Ensure block rendering implies separate lines */
+}
+
+/* Tables - Clean & Bordered */
+.markdown-preview-canvas table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1em 0;
+    font-size: 0.95em;
+}
+
+.markdown-preview-canvas th,
+.markdown-preview-canvas td {
+    border: 1px solid var(--border-subtle);
+    padding: 8px 12px;
+    text-align: left;
+}
+
+.markdown-preview-canvas th {
+    background-color: var(--surface-low);
+    font-weight: 600;
+}
+
+.markdown-preview-canvas tr:nth-child(even) {
+    background-color: rgba(0, 0, 0, 0.02);
+}
+
+/* Lists */
+.markdown-preview-canvas ul,
+.markdown-preview-canvas ol {
+    margin-bottom: 1em;
+    padding-left: 1.5em;
+}
+
+.markdown-preview-canvas li {
+    margin-bottom: 0.25em;
+}
+
+/* TipTap Task Lists */
+ul[data-type="taskList"] {
+    list-style: none;
+    padding: 0;
+}
+
+li[data-type="taskItem"] {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    margin-bottom: 0.5em;
+}
+
+li[data-type="taskItem"] label {
+    margin-right: 0.5em;
+    user-select: none;
+    cursor: pointer;
+}
+
+li[data-type="taskItem"] div {
+    flex: 1;
+}
+
+li[data-type="taskItem"] input[type="checkbox"] {
+    transform: scale(1.1);
+    cursor: pointer;
+    margin-top: 0.3em;
+    /* align with text */
+}
+
+/* Links */
+.markdown-preview-canvas a {
+    color: #0066cc;
+    /* Apple/Standard Blue */
+    text-decoration: none;
+}
+
+.markdown-preview-canvas a:hover {
+    text-decoration: underline;
+}
+
+/* Horizontal Rule */
+.markdown-preview-canvas hr {
+    border: none;
+    border-top: 1px solid var(--border-subtle);
+    margin: 2em 0;
+}
+
+/* Images */
+.markdown-preview-canvas img {
+    max-width: 100%;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    /* nicer shadow */
+    margin: 1em 0;
+    display: block;
+    /* Avoid inline placement weirdness */
+}
+
+.placeholder-text {
+    color: var(--text-tertiary);
+}
+
+.formatting-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 0;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--border-subtle);
+    z-index: 2;
+    /* Ensure above */
+}
+
+.formatting-toolbar button {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.1s;
+}
+
+.formatting-toolbar button:hover {
+    background: var(--surface-mid);
+    color: var(--text-primary);
+}
+
+.toolbar-divider {
+    width: 1px;
+    height: 20px;
+    background: var(--border-subtle);
+    margin: 0 4px;
+}
+
+.empty-stage {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-tertiary);
+    gap: 12px;
+}
+
+.empty-icon {
+    color: var(--text-tertiary);
+    margin-bottom: 0;
+    opacity: 0.6;
+}
+
+.empty-icon svg {
+    width: 64px;
+    height: 64px;
+}
+
+.note-preview-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.note-preview-meta {
+    display: flex;
+    gap: 8px;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.3;
+    width: 100%;
+}
+
+.note-time {
+    white-space: nowrap;
+    font-weight: 400;
+}
+
+.note-preview-text {
+    color: var(--text-tertiary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ... New Styles ... */
+.context-menu-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1000;
+}
+
+.context-menu {
+    position: fixed;
+    background: var(--bg-app);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    padding: 4px;
+    min-width: 140px;
+    z-index: 1001;
+    display: flex;
+    flex-direction: column;
+}
+
+.menu-item {
+    background: none;
+    border: none;
+    text-align: left;
+    padding: 6px 12px;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    cursor: pointer;
+    border-radius: 4px;
+}
+
+.menu-item:hover {
+    background: var(--surface-low);
+}
+
+.menu-item.delete {
+    color: var(--accent-danger);
+}
+
+.menu-item.delete:hover {
+    background: rgba(255, 0, 0, 0.05);
+}
+
+.menu-divider {
+    height: 1px;
+    background: var(--border-subtle);
+    margin: 4px 0;
+}
+
+
+/* Modal Styles */
+.modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    backdrop-filter: blur(2px);
+}
+
+.modal-content {
+    background: var(--bg-app);
+    width: 400px;
+    max-height: 80vh;
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: modalIn 0.2s ease-out;
+}
+
+@keyframes modalIn {
+    from {
+        transform: scale(0.95);
+        opacity: 0;
+    }
+
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.modal-header {
+    padding: 16px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.folder-select-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.folder-select-item {
+    background: none;
+    border: none;
+    text-align: left;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background 0.1s;
+    display: flex;
+    align-items: center;
+}
+
+.folder-select-item:hover {
+    background: var(--surface-low);
+}
+
+.folder-select-item.active {
+    background: var(--accent-primary);
+    color: white;
+}
+
+.folder-select-item:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.modal-actions {
+    padding: 12px 16px;
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    justify-content: flex-end;
+}
+
+.search-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 8px;
+    padding: 2px 8px;
+    transition: background 0.1s;
+}
+
+.search-wrapper:focus-within {
+    background: white;
+    box-shadow: 0 0 0 2px rgba(66, 133, 244, 0.3);
+    /* Subtle focus ring */
+    /* border: 1px solid var(--accent-primary); */
+}
+
+.search-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-tertiary);
+    margin-right: 6px;
+    opacity: 0.7;
+}
+
+.notes-search-bar {
+    width: 100%;
+    border: none;
+    background: transparent;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    outline: none;
+    padding: 6px 0;
+    line-height: 1.2;
+}
+
+.notes-search-bar::placeholder {
+    color: var(--text-tertiary);
+    font-weight: 500;
+    opacity: 0.8;
+}
+
+.close-btn {
+    padding: 8px 16px;
+    border: 1px solid var(--border-subtle);
+    background: var(--surface-low);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
+.close-btn:hover {
+    background: var(--surface-mid);
+}
+
+/* Layout Constraints for Split View Stability */
+.notes-list-col {
+    flex-shrink: 1 !important;
+    min-width: 180px !important;
+    overflow: hidden;
+    /* Ensure content doesn't spill */
+}
+
+/* Ensure Editor can shrink enough to allow other columns */
+.editor-stage {
+    flex-shrink: 1 !important;
+}

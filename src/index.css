@@ -1,0 +1,111 @@
+/* NINAI Design System - Light Theme */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  /* Enforce Light Mode */
+  color-scheme: light;
+
+  /* Type */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+
+  /* Colors - Aluminum & Glass (Jony Ive Style) - STRICT LIGHT */
+  --bg-app: #ffffff;
+  --bg-sidebar: #f5f5f7;
+  --bg-panel: rgba(255, 255, 255, 0.95);
+
+  --surface-low: #ffffff;
+  --surface-mid: #eef0f2;
+  --surface-high: #e5e5ea;
+
+  /* Text - High Legibility (PF/SF Style) */
+  --text-primary: #1d1d1f;
+  --text-secondary: #86868b;
+  --text-tertiary: #a1a1a6;
+
+  /* Accents - Jony Ive / Apple Core Colors */
+  --accent-primary: #0071e3;
+  --accent-success: #34c759;
+  --accent-warning: #ffcc00;
+  --accent-danger: #ff3b30;
+  --accent-glow: rgba(0, 113, 227, 0.15);
+
+  /* Borders - Ultra Thin */
+  --border-subtle: rgba(0, 0, 0, 0.08);
+  --border-highlight: rgba(0, 0, 0, 0.12);
+
+  /* Shadows - Diffuse */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.12);
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+}
+
+/* Force Light Mode in Dark System Preference */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: light;
+    --bg-app: #ffffff;
+    --bg-sidebar: #f5f5f7;
+    --bg-panel: rgba(255, 255, 255, 0.95);
+    --surface-low: #ffffff;
+    --surface-mid: #eef0f2;
+    --surface-high: #e5e5ea;
+    --text-primary: #1d1d1f;
+    --text-secondary: #86868b;
+    --text-tertiary: #a1a1a6;
+    --border-subtle: rgba(0, 0, 0, 0.08);
+  }
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  height: 100vh;
+  overflow: hidden;
+}
+
+#root {
+  height: 100%;
+  width: 100%;
+  isolation: isolate;
+}
+
+/* Utilities */
+.glass {
+  background: var(--bg-panel);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-left: 1px solid rgba(0, 0, 0, 0.05);
+  /* Adjusted for light mode visibility */
+}
+
+/* Scrollbar Tweaks for Light Mode */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--surface-high);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
