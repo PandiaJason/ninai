@@ -1,73 +1,49 @@
-# React + TypeScript + Vite
+# Ninai
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+**The New Interface for AI.**
 
-Currently, two official plugins are available:
+Ninai is a local-first productivity application designed for the AI era. It reimagines the "copy-paste" workflow by integrating a powerful web browser side-by-side with a rich markdown editor.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Why Ninai?
 
-## React Compiler
+Modern workflows involve constantly switching between AI tools (ChatGPT, Claude, Gemini) and your notes. Ninai bridges this gap with a unified, dual-pane interface that keeps you in flow.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### Key Features
 
-## Expanding the ESLint configuration
+*   **⚡ Dual-Pane Workflow**: Browse any web app (AI models, documentation, tutorials) on the right, and take notes on the left.
+*   **🧘 Zen Mode**: Focus purely on your writing with a single click that hides the browser and sidebar.
+*   **🔒 Local-First**: Your notes are stored locally on your device (IndexedDB + File System). No cloud sync, no tracking, complete privacy.
+*   **🖼️ robust Copy-Paste**: 
+    *   **Universal Image Copy**: Bypass web restrictions (CORS, Hotlink protection) to copy *any* image from the web directly into your notes.
+    *   **Smart Formatting**: Pasted content retains its structure.
+*   **📂 Organized**: Nested folders, drag-and-drop reordering, and a powerful search.
+*   **🎨 Beautiful Design**: A "Jony Ive" inspired monochrome aesthetic that feels premium and distraction-free.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Technology Stack
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+*   **Electron**: Cross-platform desktop runtime.
+*   **React + Vite**: Fast, modern UI framework.
+*   **TypeScript**: Type-safe logic.
+*   **TipTap**: headless wrapper for ProseMirror, powering the rich text editor.
+*   **Dexie.js**: Wrapper for IndexedDB for fast local storage.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## Development
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+1.  **Install Dependencies**:
+    ```bash
+    npm install
+    ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+2.  **Run Development Mode**:
+    ```bash
+    npm run desktop
+    ```
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+3.  **Build for Production**:
+    ```bash
+    npm run dist:all
+    ```
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## License
+
+MIT © [Jason P](https://github.com/PandiaJason)
