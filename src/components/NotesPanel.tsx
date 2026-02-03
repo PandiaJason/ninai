@@ -173,7 +173,7 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
         // console.log("Saving note:", id, updates);
         await db.notes.update(id, { ...updates, updatedAt: new Date() });
         setIsDirty(false); // Saved
-    }, 800);
+    }, 500);
 
     const updateNote = (field: 'title' | 'content', value: string) => {
         if (!activeNoteId) return;
@@ -358,7 +358,7 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
             setLocalTitle(activeNote.title);
 
             // Sync Content
-            editor.commands.setContent(activeNote.content);
+            editor.commands.setContent(activeNote.content, { emitUpdate: false });
             previousNoteIdRef.current = activeNote.id;
         }
     }, [activeNote, editor]);
@@ -562,6 +562,7 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
         const counts: { [key: string]: number } = {};
         counts['all'] = notes.length;
         folders.forEach(f => {
+            if (f.id === 'all') return;
             counts[f.id] = notes.filter(n => n.folderId === f.id).length;
         });
         return counts;
@@ -805,11 +806,43 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                                             </svg>
                                         </button>
                                     )}
+                                    {/* Sidebar Toggle (Visible if folders/list hidden) */}
                                     <span className="last-edited">
                                         {isDirty ? 'Saving in background...' : `Last edited ${activeNote.updatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
                                     </span>
                                 </div>
                                 <div style={{ display: 'flex', gap: '8px' }}>
+                                    {/* PDF Export Button (Requested Icon) */}
+                                    <button
+                                        className="icon-btn-primary"
+                                        onClick={async () => {
+                                            if (!activeNote || !editor) return;
+                                            const title = activeNote.title || 'Untitled';
+                                            const html = editor.getHTML();
+                                            try {
+                                                // @ts-expect-error Electron API
+                                                if (window.electronAPI && window.electronAPI.printToPDF) {
+                                                    // @ts-expect-error Electron API
+                                                    await window.electronAPI.printToPDF(title, html);
+                                                } else {
+                                                    alert("PDF Export is only available in the Desktop app.");
+                                                }
+                                            } catch (e) {
+                                                console.error("PDF Export failed", e);
+                                                alert("Failed to export PDF.");
+                                            }
+                                        }}
+                                        title="Export as PDF"
+                                    >
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                            <polyline points="14 2 14 8 20 8"></polyline>
+                                            <line x1="16" y1="13" x2="8" y2="13"></line>
+                                            <line x1="16" y1="17" x2="8" y2="17"></line>
+                                            <polyline points="10 9 9 9 8 9"></polyline>
+                                        </svg>
+                                    </button>
+
                                     {/* Focus Mode (Expand Editor) */}
                                     <button
                                         className={`icon-btn-primary ${isFullScreen ? 'active' : ''}`}

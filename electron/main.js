@@ -175,6 +175,77 @@ function createWindow() {
             createContextMenu(params, win.webContents);
         }
     });
+
+    // Handle PDF Export
+    ipcMain.handle('print-to-pdf', async (event, title, customHtml) => {
+        console.log('Main: Generating PDF for', title);
+        const printWin = new BrowserWindow({
+            show: false,
+            webPreferences: {
+                nodeIntegration: false,
+                contextIsolation: true
+            }
+        });
+
+        const safeHtml = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <style>
+                    body { 
+                        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+                        padding: 40px; 
+                        color: #1a1a1a;
+                        max-width: 800px;
+                        margin: 0 auto;
+                    }
+                    h1 { border-bottom: 1px solid #eaeaea; padding-bottom: 10px; margin-bottom: 20px; }
+                    img { max-width: 100%; height: auto; border-radius: 4px; }
+                    blockquote { border-left: 4px solid #ddd; margin: 0; padding-left: 16px; color: #666; }
+                    pre { background: #f5f5f5; padding: 12px; border-radius: 6px; overflow-x: auto; }
+                    code { font-family: "SF Mono", "Monaco", "Courier New", monospace; font-size: 0.9em; background: #f5f5f5; padding: 2px 4px; border-radius: 4px; }
+                    p { line-height: 1.6; margin-bottom: 1em; }
+                    ul, ol { line-height: 1.6; padding-left: 24px; }
+                    li { margin-bottom: 4px; }
+                </style>
+            </head>
+            <body>
+                <h1>${title}</h1>
+                ${customHtml}
+            </body>
+            </html>
+        `;
+
+        try {
+            await printWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(safeHtml));
+
+            const pdfData = await printWin.webContents.printToPDF({
+                printBackground: true,
+                pageSize: 'A4',
+                margins: { top: 1, bottom: 1, left: 1, right: 1 } // inches
+            });
+
+            const { filePath } = await import('electron').then(e => e.dialog.showSaveDialog({
+                title: 'Save PDF',
+                defaultPath: `${title.replace(/[^a-z0-9\s-_]/gi, '').trim() || 'Note'}.pdf`,
+                filters: [{ name: 'PDF Document', extensions: ['pdf'] }]
+            }));
+
+            if (filePath) {
+                await import('fs').then(fs => fs.promises.writeFile(filePath, pdfData));
+                console.log('Main: PDF Content written to', filePath);
+                return { success: true, filePath };
+            }
+            return { success: false };
+
+        } catch (error) {
+            console.error('PDF Generation Error:', error);
+            throw error;
+        } finally {
+            printWin.close();
+        }
+    });
 }
 
 app.whenReady().then(() => {

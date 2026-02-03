@@ -146,6 +146,7 @@ export const ToolView: React.FC<ToolViewProps> = ({ tool, onMaximize, isMaximize
                     allowpopups={true}
                     // @ts-ignore - webview types
                     partition={`persist:${tool.id} `} // Unique partition per tool saves login state
+                    useragent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36"
                 />
             </div>
         </div>

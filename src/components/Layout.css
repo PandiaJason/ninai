@@ -150,6 +150,7 @@
     border-left: none;
 }
 
+/* Right Sidebar Toggle (Notes/Editor) */
 .notes-toggle {
     position: absolute;
     bottom: 20px;

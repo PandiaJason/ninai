@@ -39,52 +39,57 @@ export class NinaiDB extends Dexie {
 
     // Helper to populate from localStorage if empty
     async populateFromLocalStorage() {
-        const hasNotes = await this.notes.count() > 0;
-        if (!hasNotes) {
-            console.log("Checking for legacy localStorage data...");
-            const savedNotes = localStorage.getItem('ninai_notes');
-            const savedFolders = localStorage.getItem('ninai_folders');
+        try {
+            if (!this.isOpen()) await this.open();
+            const hasNotes = await this.notes.count() > 0;
+            if (!hasNotes) {
+                console.log("Checking for legacy localStorage data...");
+                const savedNotes = localStorage.getItem('ninai_notes');
+                const savedFolders = localStorage.getItem('ninai_folders');
 
-            if (savedNotes) {
-                try {
-                    const parsedNotes = JSON.parse(savedNotes).map((n: any) => ({
-                        ...n,
-                        updatedAt: new Date(n.updatedAt) // Hydrate Date
-                    }));
-                    await this.notes.bulkAdd(parsedNotes);
-                    console.log(`Migrated ${parsedNotes.length} notes.`);
-                } catch (e) {
-                    console.error("Failed to migrate notes", e);
+                if (savedNotes) {
+                    try {
+                        const parsedNotes = JSON.parse(savedNotes).map((n: any) => ({
+                            ...n,
+                            updatedAt: new Date(n.updatedAt) // Hydrate Date
+                        }));
+                        await this.notes.bulkAdd(parsedNotes);
+                        console.log(`Migrated ${parsedNotes.length} notes.`);
+                    } catch (e) {
+                        console.error("Failed to migrate notes", e);
+                    }
+                } else {
+                    // Default Note
+                    await this.notes.add({
+                        id: '1',
+                        folderId: 'ninai',
+                        title: 'Welcome to NINAI',
+                        content: 'This is your new knowledge base.\n\nNow fast and persistent.',
+                        updatedAt: new Date()
+                    });
                 }
-            } else {
-                // Default Note
-                await this.notes.add({
-                    id: '1',
-                    folderId: 'ninai',
-                    title: 'Welcome to NINAI',
-                    content: 'This is your new knowledge base.\n\nNow fast and persistent.',
-                    updatedAt: new Date()
-                });
-            }
 
-            if (savedFolders) {
-                try {
-                    const parsedFolders = JSON.parse(savedFolders);
-                    await this.folders.bulkAdd(parsedFolders);
-                    console.log(`Migrated ${parsedFolders.length} folders.`);
-                } catch (e) {
-                    console.error("Failed to migrate folders", e);
+                if (savedFolders) {
+                    try {
+                        const parsedFolders = JSON.parse(savedFolders);
+                        await this.folders.bulkAdd(parsedFolders);
+                        console.log(`Migrated ${parsedFolders.length} folders.`);
+                    } catch (e) {
+                        console.error("Failed to migrate folders", e);
+                    }
+                } else {
+                    // Default Folders
+                    await this.folders.bulkAdd([
+                        { id: 'all', name: 'All Notes', icon: 'Inbox' },
+                        { id: 'ninai', name: 'NINAI', icon: 'Folder' }
+                    ]);
                 }
-            } else {
-                // Default Folders
-                await this.folders.bulkAdd([
-                    { id: 'all', name: 'All Notes', icon: 'Inbox' },
-                    { id: 'ninai', name: 'NINAI', icon: 'Folder' }
-                ]);
-            }
 
-            // Optional: Clear localStorage after successful migration? 
-            // Keeping it for safety for now.
+                // Optional: Clear localStorage after successful migration? 
+                // Keeping it for safety for now.
+            }
+        } catch (error) {
+            console.error("Database populate error:", error);
         }
     }
 }
