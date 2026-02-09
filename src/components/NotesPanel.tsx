@@ -459,6 +459,7 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
             case 'h1': editor.chain().focus().toggleHeading({ level: 1 }).run(); break;
             case 'h2': editor.chain().focus().toggleHeading({ level: 2 }).run(); break;
             case 'h3': editor.chain().focus().toggleHeading({ level: 3 }).run(); break;
+            case 'paragraph': editor.chain().focus().setParagraph().run(); break; // New Body action
             case 'bullet': editor.chain().focus().toggleBulletList().run(); break;
             case 'task': editor.chain().focus().toggleTaskList().run(); break;
             case 'code': editor.chain().focus().toggleCodeBlock().run(); break;
@@ -940,6 +941,7 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                                     <button onClick={() => toggleFormat('h1')} className={editor?.isActive('heading', { level: 1 }) ? 'active' : ''} title="Heading 1" style={{ fontSize: '13px', fontWeight: 600 }}>H1</button>
                                     <button onClick={() => toggleFormat('h2')} className={editor?.isActive('heading', { level: 2 }) ? 'active' : ''} title="Heading 2" style={{ fontSize: '13px', fontWeight: 600 }}>H2</button>
                                     <button onClick={() => toggleFormat('h3')} className={editor?.isActive('heading', { level: 3 }) ? 'active' : ''} title="Heading 3" style={{ fontSize: '13px', fontWeight: 600 }}>H3</button>
+                                    <button onClick={() => toggleFormat('paragraph')} className={editor?.isActive('paragraph') ? 'active' : ''} title="Body Text" style={{ fontSize: '13px', fontWeight: 500 }}>Body</button>
                                     <div className="toolbar-divider" />
                                     <button onClick={() => toggleFormat('bold')} className={editor?.isActive('bold') ? 'active' : ''} title="Bold">
                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path></svg>

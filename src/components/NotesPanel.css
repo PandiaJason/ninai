@@ -629,7 +629,22 @@ li[data-type="taskItem"] input[type="checkbox"] {
     transform: scale(1.1);
     cursor: pointer;
     margin-top: 0.3em;
+    margin-right: 0.5em;
+    /* Explicit spacing */
     /* align with text */
+}
+
+li[data-type="taskItem"] p {
+    margin: 0;
+    /* Critical: Prevent p from breaking onto new line or adding gap */
+    display: inline-block;
+    /* Try to force inline flow if needed, though flex handles it */
+}
+
+li[data-type="taskItem"]>div {
+    flex: 1;
+    min-width: 0;
+    /* proper flex text wrapping */
 }
 
 /* Links */
