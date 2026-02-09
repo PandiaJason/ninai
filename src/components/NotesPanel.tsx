@@ -1111,21 +1111,26 @@ const processSmartPaste = (editor: any, content: { text: string, html: string })
 
     // 2. Handle Text Content (which might be escaped HTML from some LLMs)
     if (content.text) {
-        // Decode HTML entities (e.g. &lt; -> <)
-        const txt = document.createElement('textarea');
-        txt.innerHTML = content.text;
-        const decoded = txt.value;
+        // Manual decoding to be 100% sure (DOM methods can be flaky in some contexts)
+        const decoded = content.text
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&amp;/g, '&')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'");
+
+        console.log("Smart Paste: Decoded content:", decoded.substring(0, 50) + "...");
 
         // Detection: Does the DECODED text look like HTML tags?
-        // e.g. "<strong>" or "<p>"
-        // regex checks for <tag> at start or generally containing tags
-        const hasHTMLTags = /<[a-z][\s\S]*>/i.test(decoded);
+        // Check for common block tags: <p, <div, <ul, <ol, <h1-h6, <table
+        const hasBlockTags = /<(p|div|ul|ol|h[1-6]|table|blockquote|pre|code)/i.test(decoded);
 
-        if (hasHTMLTags) {
+        if (hasBlockTags || (decoded.includes('<') && decoded.includes('>'))) {
             console.log("Smart Paste: Decoded text is HTML -> Inserting as HTML");
+            // We insert it as HTML content, which Tiptap parses into formatting
             editor.chain().focus().insertContent(decoded).run();
         } else {
-            console.log("Smart Paste: Decoded text is Markdown -> Using Markdown Parser");
+            console.log("Smart Paste: Decoded text is Markdown/Text -> Using Markdown Parser");
             insertMarkdown(editor, decoded);
         }
     } else if (content.html) {
