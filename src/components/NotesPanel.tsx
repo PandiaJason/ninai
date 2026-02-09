@@ -1111,17 +1111,26 @@ const processSmartPaste = (editor: any, content: { text: string, html: string })
         return;
     }
 
-    // 2. Handle Text Content (which might be escaped HTML from some LLMs)
+    // 2. Handle Text Content
     if (content.text) {
-        // Manual decoding to be 100% sure
-        const decoded = content.text
-            .replace(/&lt;/g, '<')
-            .replace(/&gt;/g, '>')
-            .replace(/&amp;/g, '&')
-            .replace(/&quot;/g, '"')
-            .replace(/&#39;/g, "'");
+        // Recursive decoding to handle double-escaped entities
+        let decoded = content.text;
+        let previous = '';
+        let loop = 0;
 
-        console.log("Smart Paste: Decoded content:", decoded.substring(0, 50) + "...");
+        while (decoded !== previous && loop < 3) {
+            previous = decoded;
+            decoded = decoded
+                .replace(/&lt;/g, '<')
+                .replace(/&gt;/g, '>')
+                .replace(/&amp;/g, '&')
+                .replace(/&quot;/g, '"')
+                .replace(/&#39;/g, "'")
+                .replace(/&nbsp;/g, ' ');
+            loop++;
+        }
+
+        console.log("Smart Paste: Final Decoded content:", decoded.substring(0, 50) + "...");
 
         // Check for HTML structure
         const hasBlockTags = /<(p|div|ul|ol|h[1-6]|table|blockquote|pre|code)/i.test(decoded);
