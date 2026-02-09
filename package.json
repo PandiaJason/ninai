@@ -1,7 +1,7 @@
 {
   "name": "ninai",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.3.0",
   "license": "MIT",
   "author": "Jason P",
   "type": "module",
@@ -101,8 +101,6 @@
     "@tiptap/extension-table-row": "^3.19.0",
     "@types/turndown": "^5.0.6",
     "lowlight": "^3.3.0",
-    "marked": "^17.0.1",
-    "turndown": "^7.2.2",
-    "turndown-plugin-gfm": "^1.0.2"
+    "marked": "^17.0.1"
   }
 }
