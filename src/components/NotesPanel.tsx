@@ -719,34 +719,6 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                     />
                 </div>
 
-                <div className="sidebar-footer" style={{
-                    padding: '12px',
-                    borderTop: '1px solid var(--border-color)',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginTop: 'auto' // Push to bottom
-                }}>
-                    <span style={{ fontSize: '10px', color: 'var(--text-secondary)', opacity: 0.6 }}>v1.0.0</span>
-                    <button
-                        className="icon-btn-ghost"
-                        onClick={async () => {
-                            if (confirm('FACTORY RESET: This will delete ALL notes and folders. This cannot be undone.\n\nAre you sure?')) {
-                                await db.resetDatabase();
-                                window.location.reload();
-                            }
-                        }}
-                        title="Factory Reset (Clear Data)"
-                        style={{ color: 'var(--text-secondary)', width: '24px', height: '24px', padding: '4px' }}
-                    >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M3 6h18"></path>
-                            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
-                            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
-                        </svg>
-                    </button>
-                </div>
-
                 {zenMode ? (
                     <button className="column-toggle-collapsed" onClick={onToggleZenMode}>
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 5l7 7-7 7" /><path d="M5 5l7 7-7 7" /></svg>
@@ -1124,28 +1096,12 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
 const processSmartPaste = (editor: any, content: { text: string, html: string }) => {
     if (!content.text && !content.html) return;
 
-    // SMART PASTE LOGIC (RESTORED STABLE VERSION):
-    // Use Tiptap's native HTML/Content parser directly.
-    // This avoids double-escaping issues and preserves GFM (tables/lists) natively.
+    // SMART PASTE LOGIC (ORIGINAL WORKING VERSION):
+    // Use TEXT content only - this is what worked initially
+    // Ignore HTML to avoid all the escaping/encoding issues
 
-    console.log("Smart Paste: Processing content");
-
-    // Decode HTML entities if present (e.g., &lt; -> <, &gt; -> >)
-    if (content.html && content.html.trim().length > 0) {
-        const temp = document.createElement('div');
-        temp.innerHTML = content.html;
-        const decodedHtml = temp.textContent || temp.innerText || '';
-
-        // If we successfully decoded HTML, use it
-        if (decodedHtml && decodedHtml.includes('<')) {
-            console.log("Smart Paste: Using decoded HTML");
-            editor.chain().focus().insertContent(decodedHtml).run();
-            return;
-        }
-    }
-
-    // Fallback to simple insertion
-    editor.chain().focus().insertContent(content.html || content.text).run();
+    console.log("Smart Paste: Inserting text content");
+    editor.chain().focus().insertContent(content.text || content.html).run();
 };
 
 // Internal Component for ImportButton
