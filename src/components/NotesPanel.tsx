@@ -18,7 +18,7 @@ import type { Note } from '../db';
 import './NotesPanel.css';
 import { useDebounce } from '../hooks/useDebounce';
 import { FolderList } from './FolderList';
-import { exportToMarkdown, insertMarkdown } from '../services/llm';
+import { exportToMarkdown } from '../services/llm';
 
 interface NotesPanelProps {
     zenMode?: boolean;
@@ -727,7 +727,7 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                     alignItems: 'center',
                     marginTop: 'auto' // Push to bottom
                 }}>
-                    <span style={{ fontSize: '10px', color: 'var(--text-secondary)', opacity: 0.8, fontWeight: 500 }}>Networking Interface N AI v1.0.0</span>
+                    <span style={{ fontSize: '10px', color: 'var(--text-secondary)', opacity: 0.6 }}>v1.0.0</span>
                     <button
                         className="icon-btn-ghost"
                         onClick={async () => {
@@ -1124,22 +1124,12 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
 const processSmartPaste = (editor: any, content: { text: string, html: string }) => {
     if (!content.text && !content.html) return;
 
-    // SMART PASTE LOGIC:
-    // 1. If it looks like a Table in HTML, insert it directly.
-    // 2. Otherwise, use the Markdown parser on the TEXT content.
-    //    This is the "Stable" behavior that handles ChatGPT's formatting correctly.
+    // SMART PASTE LOGIC (RESTORED STABLE VERSION):
+    // Use Tiptap's native HTML/Content parser directly.
+    // This avoids double-escaping issues and preserves GFM (tables/lists) natively.
 
-    const isTable = content.html && content.html.includes('<table');
-
-    if (isTable) {
-        console.log("Smart Paste: Detected Table, inserting HTML.");
-        editor.chain().focus().insertContent(content.html).run();
-    } else {
-        console.log("Smart Paste: Using Markdown insertion (Stable Mode).");
-        // We use the TEXT content which ChatGPT formats with markdown-like markers (**bold**)
-        // and parse it back to HTML for Tiptap.
-        insertMarkdown(editor, content.text);
-    }
+    console.log("Smart Paste: Inserting content directly.");
+    editor.chain().focus().insertContent(content.html || content.text).run();
 };
 
 // Internal Component for ImportButton
