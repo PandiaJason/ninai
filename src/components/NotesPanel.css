@@ -608,43 +608,45 @@ ul[data-type="taskList"] {
     padding: 0;
 }
 
+/* Robust Task Item Layout */
 li[data-type="taskItem"] {
-    display: flex;
-    flex-direction: row;
-    align-items: flex-start;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: flex-start !important;
     margin-bottom: 0.5em;
 }
 
 li[data-type="taskItem"] label {
+    flex-shrink: 0;
     margin-right: 0.5em;
+    /* Explicit spacing */
     user-select: none;
-    cursor: pointer;
-}
-
-li[data-type="taskItem"] div {
-    flex: 1;
+    margin-top: 2px;
+    /* Slight optical adjustment */
 }
 
 li[data-type="taskItem"] input[type="checkbox"] {
     transform: scale(1.1);
     cursor: pointer;
-    margin-top: 0.3em;
-    margin-right: 0.5em;
-    /* Explicit spacing */
-    /* align with text */
-}
-
-li[data-type="taskItem"] p {
     margin: 0;
-    /* Critical: Prevent p from breaking onto new line or adding gap */
-    display: inline-block;
-    /* Try to force inline flow if needed, though flex handles it */
+    /* Reset margins */
 }
 
 li[data-type="taskItem"]>div {
     flex: 1;
     min-width: 0;
     /* proper flex text wrapping */
+    display: flex;
+    /* Ensure div behaves well */
+    flex-direction: column;
+}
+
+li[data-type="taskItem"] p {
+    margin: 0 !important;
+    /* Critical: Prevent p from breaking onto new line or adding gap */
+    display: block;
+    /* Default block is fine inside flex column */
+    line-height: 1.5;
 }
 
 /* Links */
