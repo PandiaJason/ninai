@@ -1119,27 +1119,44 @@ const processSmartPaste = (editor: any, content: { text: string, html: string })
         return;
     }
 
-    // Fallback: Use Text (Try to clean it if it looks like escaped HTML)
+    // METHOD 2: Aggressive Text Decoding (Fallback)
     if (content.text) {
         console.log("Smart Paste: Fallback to Text source");
         let decoded = content.text;
 
-        // Recursive decoding to handle double-escaped entities
+        // Loop 5 times to handle extreme nesting/escaping
         let loop = 0;
         let previous = '';
-        while (decoded !== previous && loop < 3) {
+        while (decoded !== previous && loop < 5) {
             previous = decoded;
             decoded = decoded
-                .replace(/&lt;/g, '<')
-                .replace(/&gt;/g, '>')
-                .replace(/&amp;/g, '&')
-                .replace(/&quot;/g, '"')
+                .replace(/&lt;/gi, '<')
+                .replace(/&gt;/gi, '>')
+                .replace(/&amp;/gi, '&')
+                .replace(/&quot;/gi, '"')
                 .replace(/&#39;/g, "'")
-                .replace(/&nbsp;/g, ' ');
+                .replace(/&#x27;/g, "'")
+                .replace(/&#60;/g, '<')
+                .replace(/&#62;/g, '>')
+                .replace(/&nbsp;/gi, ' ');
             loop++;
         }
 
-        insertMarkdown(editor, decoded);
+        console.log("Smart Paste: Final Decoded:", decoded.substring(0, 100));
+
+        // CRITICAL CHECK: Does it look like HTML tags?
+        // If it starts with <tag> or contains block tags, INSERT AS HTML DIRECTLY.
+        // Do NOT pass to Markdown parser, which might re-escape or get confused.
+        const hasBlockTags = /<(p|div|ul|ol|li|h[1-6]|table|blockquote|pre|code|span|strong|em|br)/i.test(decoded);
+        const startsWithTag = /^<[a-z]/i.test(decoded.trim());
+
+        if (hasBlockTags || startsWithTag) {
+            console.log("Smart Paste: Detected HTML Tags -> Direct HTML Insert");
+            editor.chain().focus().insertContent(decoded).run();
+        } else {
+            console.log("Smart Paste: Plain Text/Markdown -> using insertMarkdown");
+            insertMarkdown(editor, decoded);
+        }
     }
 };
 
