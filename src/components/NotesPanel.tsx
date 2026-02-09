@@ -1098,26 +1098,35 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
 const processSmartPaste = (editor: any, content: { text: string, html: string }) => {
     if (!content.text && !content.html) return;
 
-    // SMART PASTE LOGIC (ORIGINAL WORKING VERSION):
-    // Use TEXT content only - this is what worked initially
-    // Ignore HTML to avoid all the escaping/encoding issues
+    console.log("Smart Paste: Processing content");
 
-    console.log("Smart Paste: Parsing content");
+    // METHOD: "Notion AI Style" - Prefer HTML Source for conversion
+    // If we have HTML, use Turndown to convert it to clean Markdown.
+    // This avoids the messy/escaped "text" representation often sent by browsers.
+    if (content.html && content.html.trim().length > 0) {
+        console.log("Smart Paste: Using HTML source for Markdown conversion");
+        const turndownService = new TurndownService({
+            headingStyle: 'atx',
+            codeBlockStyle: 'fenced'
+        });
+        turndownService.use(gfm);
 
-    // 1. Try to use HTML directly if available (tables, complex layouts)
-    if (content.html && content.html.includes('<table')) {
-        console.log("Smart Paste: Table detected, using HTML");
-        editor.chain().focus().insertContent(content.html).run();
+        // Convert HTML -> Markdown
+        const markdown = turndownService.turndown(content.html);
+        console.log("Smart Paste: Converted HTML to MD:", markdown.substring(0, 50) + "...");
+
+        insertMarkdown(editor, markdown);
         return;
     }
 
-    // 2. Handle Text Content
+    // Fallback: Use Text (Try to clean it if it looks like escaped HTML)
     if (content.text) {
-        // Recursive decoding to handle double-escaped entities
+        console.log("Smart Paste: Fallback to Text source");
         let decoded = content.text;
-        let previous = '';
-        let loop = 0;
 
+        // Recursive decoding to handle double-escaped entities
+        let loop = 0;
+        let previous = '';
         while (decoded !== previous && loop < 3) {
             previous = decoded;
             decoded = decoded
@@ -1130,40 +1139,7 @@ const processSmartPaste = (editor: any, content: { text: string, html: string })
             loop++;
         }
 
-        console.log("Smart Paste: Final Decoded content:", decoded.substring(0, 50) + "...");
-
-        // Check for HTML structure
-        const hasBlockTags = /<(p|div|ul|ol|h[1-6]|table|blockquote|pre|code)/i.test(decoded);
-
-        if (hasBlockTags || (decoded.includes('<') && decoded.includes('>'))) {
-            console.log("Smart Paste: Decoded text is HTML -> Converting to Markdown");
-
-            // Webview often gives HTML. User wants "Markdown like ChatGPT".
-            // So we convert HTML -> Markdown using Turndown
-            const turndownService = new TurndownService({
-                headingStyle: 'atx',
-                codeBlockStyle: 'fenced'
-            });
-            turndownService.use(gfm);
-
-            const markdown = turndownService.turndown(decoded);
-            console.log("Smart Paste: Converted to Markdown:", markdown.substring(0, 50) + "...");
-
-            insertMarkdown(editor, markdown);
-        } else {
-            console.log("Smart Paste: Text seems like Markdown/Plain -> Using Markdown Parser");
-            insertMarkdown(editor, decoded);
-        }
-    } else if (content.html) {
-        // Fallback: If we only have HTML and no text, convert it to MD too for consistency
-        console.log("Smart Paste: HTML-only content -> Converting to Markdown");
-        const turndownService = new TurndownService({
-            headingStyle: 'atx',
-            codeBlockStyle: 'fenced'
-        });
-        turndownService.use(gfm);
-        const markdown = turndownService.turndown(content.html);
-        insertMarkdown(editor, markdown);
+        insertMarkdown(editor, decoded);
     }
 };
 
