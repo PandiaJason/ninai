@@ -18,7 +18,7 @@ import type { Note } from '../db';
 import './NotesPanel.css';
 import { useDebounce } from '../hooks/useDebounce';
 import { FolderList } from './FolderList';
-import { exportToMarkdown } from '../services/llm';
+import { exportToMarkdown, insertMarkdown } from '../services/llm';
 
 interface NotesPanelProps {
     zenMode?: boolean;
