@@ -1128,7 +1128,23 @@ const processSmartPaste = (editor: any, content: { text: string, html: string })
     // Use Tiptap's native HTML/Content parser directly.
     // This avoids double-escaping issues and preserves GFM (tables/lists) natively.
 
-    console.log("Smart Paste: Inserting content directly.");
+    console.log("Smart Paste: Processing content");
+
+    // Decode HTML entities if present (e.g., &lt; -> <, &gt; -> >)
+    if (content.html && content.html.trim().length > 0) {
+        const temp = document.createElement('div');
+        temp.innerHTML = content.html;
+        const decodedHtml = temp.textContent || temp.innerText || '';
+
+        // If we successfully decoded HTML, use it
+        if (decodedHtml && decodedHtml.includes('<')) {
+            console.log("Smart Paste: Using decoded HTML");
+            editor.chain().focus().insertContent(decodedHtml).run();
+            return;
+        }
+    }
+
+    // Fallback to simple insertion
     editor.chain().focus().insertContent(content.html || content.text).run();
 };
 
