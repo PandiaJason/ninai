@@ -1100,16 +1100,36 @@ const processSmartPaste = (editor: any, content: { text: string, html: string })
     // Use TEXT content only - this is what worked initially
     // Ignore HTML to avoid all the escaping/encoding issues
 
-    console.log("Smart Paste: Parsing markdown text");
-    if (content.text) {
-        // Decode HTML entities (e.g. &lt; -> <) before text parsing
-        // This fixes the issue where some sources provide escaped HTML as text
-        const temp = document.createElement('textarea');
-        temp.innerHTML = content.text;
-        const decodedText = temp.value;
+    console.log("Smart Paste: Parsing content");
 
-        insertMarkdown(editor, decodedText);
+    // 1. Try to use HTML directly if available (tables, complex layouts)
+    if (content.html && content.html.includes('<table')) {
+        console.log("Smart Paste: Table detected, using HTML");
+        editor.chain().focus().insertContent(content.html).run();
+        return;
+    }
+
+    // 2. Handle Text Content (which might be escaped HTML from some LLMs)
+    if (content.text) {
+        // Decode HTML entities (e.g. &lt; -> <)
+        const txt = document.createElement('textarea');
+        txt.innerHTML = content.text;
+        const decoded = txt.value;
+
+        // Detection: Does the DECODED text look like HTML tags?
+        // e.g. "<strong>" or "<p>"
+        // regex checks for <tag> at start or generally containing tags
+        const hasHTMLTags = /<[a-z][\s\S]*>/i.test(decoded);
+
+        if (hasHTMLTags) {
+            console.log("Smart Paste: Decoded text is HTML -> Inserting as HTML");
+            editor.chain().focus().insertContent(decoded).run();
+        } else {
+            console.log("Smart Paste: Decoded text is Markdown -> Using Markdown Parser");
+            insertMarkdown(editor, decoded);
+        }
     } else if (content.html) {
+        // Fallback for html-only content that isn't a table
         editor.chain().focus().insertContent(content.html).run();
     }
 };
