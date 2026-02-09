@@ -18,7 +18,7 @@ import type { Note } from '../db';
 import './NotesPanel.css';
 import { useDebounce } from '../hooks/useDebounce';
 import { FolderList } from './FolderList';
-import { exportToMarkdown } from '../services/llm';
+import { exportToMarkdown, insertMarkdown } from '../services/llm';
 
 interface NotesPanelProps {
     zenMode?: boolean;
@@ -1124,21 +1124,21 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
 const processSmartPaste = (editor: any, content: { text: string, html: string }) => {
     if (!content.text && !content.html) return;
 
-    // SMART PASTE LOGIC (SIMPLIFIED):
-    // Prioritize direct HTML insertion. Tiptap's parser and schema will automatically
-    // handle Tables, Lists, and formatting, and strip out unwanted CSS/tags.
-    // This replicates the native "Paste" behavior which users preferred.
+    // SMART PASTE LOGIC:
+    // 1. If it looks like a Table in HTML, insert it directly.
+    // 2. Otherwise, use the Markdown parser on the TEXT content.
+    //    This is the "Stable" behavior that handles ChatGPT's formatting correctly.
 
-    if (content.html && content.html.trim().length > 0) {
-        console.log("Smart Paste: Inserting HTML directly.");
+    const isTable = content.html && content.html.includes('<table');
+
+    if (isTable) {
+        console.log("Smart Paste: Detected Table, inserting HTML.");
         editor.chain().focus().insertContent(content.html).run();
-    }
-    else if (content.text) {
-        console.log("Smart Paste: Inserting Text/Markdown.");
-        // If it's just text, it might be Markdown. Tiptap's Markdown extension
-        // might catch it if configured, or we can use our insertMarkdown helper.
-        // Let's use Tiptap's default insertContent which is smart.
-        editor.chain().focus().insertContent(content.text).run();
+    } else {
+        console.log("Smart Paste: Using Markdown insertion (Stable Mode).");
+        // We use the TEXT content which ChatGPT formats with markdown-like markers (**bold**)
+        // and parse it back to HTML for Tiptap.
+        insertMarkdown(editor, content.text);
     }
 };
 
