@@ -1100,8 +1100,12 @@ const processSmartPaste = (editor: any, content: { text: string, html: string })
     // Use TEXT content only - this is what worked initially
     // Ignore HTML to avoid all the escaping/encoding issues
 
-    console.log("Smart Paste: Inserting text content");
-    editor.chain().focus().insertContent(content.text || content.html).run();
+    console.log("Smart Paste: Parsing markdown text");
+    if (content.text) {
+        insertMarkdown(editor, content.text);
+    } else if (content.html) {
+        editor.chain().focus().insertContent(content.html).run();
+    }
 };
 
 // Internal Component for ImportButton
