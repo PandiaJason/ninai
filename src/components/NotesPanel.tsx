@@ -1102,7 +1102,13 @@ const processSmartPaste = (editor: any, content: { text: string, html: string })
 
     console.log("Smart Paste: Parsing markdown text");
     if (content.text) {
-        insertMarkdown(editor, content.text);
+        // Decode HTML entities (e.g. &lt; -> <) before text parsing
+        // This fixes the issue where some sources provide escaped HTML as text
+        const temp = document.createElement('textarea');
+        temp.innerHTML = content.text;
+        const decodedText = temp.value;
+
+        insertMarkdown(editor, decodedText);
     } else if (content.html) {
         editor.chain().focus().insertContent(content.html).run();
     }
