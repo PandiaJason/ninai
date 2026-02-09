@@ -1,5 +1,5 @@
 
-import React, { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useImperativeHandle, forwardRef } from 'react';
 import './ToolView.css';
 import { type Tool } from '../data/tools';
 
@@ -9,11 +9,38 @@ interface ToolViewProps {
     isMaximized?: boolean;
 }
 
-export const ToolView: React.FC<ToolViewProps> = ({ tool, onMaximize, isMaximized }) => {
+export interface ToolViewHandle {
+    getSelectionHTML: () => Promise<string>;
+}
+
+export const ToolView = forwardRef<ToolViewHandle, ToolViewProps>(({ tool, onMaximize, isMaximized }, ref) => {
     const webviewRef = useRef<any>(null);
     const [canGoBack, setCanGoBack] = useState(false);
     const [canGoForward, setCanGoForward] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+
+    useImperativeHandle(ref, () => ({
+        getSelectionHTML: async () => {
+            const wv = webviewRef.current;
+            if (!wv) return '';
+            try {
+                return await wv.executeJavaScript(`
+                    (() => {
+                        const sel = window.getSelection();
+                        if (sel.rangeCount > 0) {
+                            const container = document.createElement("div");
+                            container.appendChild(sel.getRangeAt(0).cloneContents());
+                            return container.innerHTML;
+                        }
+                        return "";
+                    })()
+                `);
+            } catch (e) {
+                console.error("Failed to get selection from webview:", e);
+                return '';
+            }
+        }
+    }));
 
     useEffect(() => {
         const wv = webviewRef.current;
@@ -151,4 +178,4 @@ export const ToolView: React.FC<ToolViewProps> = ({ tool, onMaximize, isMaximize
             </div>
         </div>
     );
-};
+});

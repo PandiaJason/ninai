@@ -395,6 +395,12 @@
     /* CRITICAL: Prevent squashing */
 }
 
+/* Global Drop Feedback */
+.editor-stage.drag-over-active {
+    background: var(--surface-mid);
+    box-shadow: inset 0 0 0 4px var(--accent-primary);
+}
+
 
 .editor-toolbar-clean {
     height: 52px;
@@ -964,4 +970,52 @@ li[data-type="taskItem"] input[type="checkbox"] {
 /* Ensure Editor can shrink enough to allow other columns */
 .editor-stage {
     flex-shrink: 1 !important;
+}
+
+/* Editor Table Styles (ProseMirror) */
+.ProseMirror table {
+    border-collapse: collapse;
+    table-layout: fixed;
+    width: 100%;
+    margin: 1em 0;
+    overflow: hidden;
+}
+
+.ProseMirror td,
+.ProseMirror th {
+    min-width: 1em;
+    border: 1px solid var(--border-subtle);
+    padding: 6px 10px;
+    vertical-align: top;
+    box-sizing: border-box;
+    position: relative;
+}
+
+.ProseMirror th {
+    font-weight: 600;
+    text-align: left;
+    background-color: var(--surface-low);
+}
+
+.ProseMirror .selectedCell:after {
+    z-index: 2;
+    position: absolute;
+    content: "";
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    background: rgba(59, 130, 246, 0.1);
+    /* Blue tint */
+    pointer-events: none;
+}
+
+.ProseMirror .column-resize-handle {
+    position: absolute;
+    right: -2px;
+    top: 0;
+    bottom: -2px;
+    width: 4px;
+    background-color: var(--accent-primary);
+    pointer-events: none;
 }

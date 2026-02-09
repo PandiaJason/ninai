@@ -8,18 +8,84 @@ import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Link from '@tiptap/extension-link';
 import { Markdown } from 'tiptap-markdown';
+import { Table } from '@tiptap/extension-table';
+import { TableRow } from '@tiptap/extension-table-row';
+import { TableCell } from '@tiptap/extension-table-cell';
+import { TableHeader } from '@tiptap/extension-table-header';
+
 import { db } from '../db';
 import type { Note } from '../db';
 import './NotesPanel.css';
 import { useDebounce } from '../hooks/useDebounce';
 import { FolderList } from './FolderList';
+import { exportToMarkdown } from '../services/llm';
 
 interface NotesPanelProps {
     zenMode?: boolean;
     onToggleZenMode?: () => void;
+    onImportFromWebview?: () => Promise<{ text: string, html: string } | null>;
 }
 
-export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggleZenMode }) => {
+export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggleZenMode, onImportFromWebview }) => {
+
+    // Internal Component for Export Button with Feedback
+    const ExportButton = ({ editor }: { editor: any }) => {
+        const [status, setStatus] = useState<'idle' | 'copied'>('idle');
+
+        const handleExport = async () => {
+            console.log('Export button clicked');
+            if (!editor) return;
+            const md = exportToMarkdown(editor);
+
+            try {
+                // @ts-ignore
+                if (window.electronAPI?.clipboard) {
+                    // @ts-ignore
+                    window.electronAPI.clipboard.writeText(md);
+                } else {
+                    await navigator.clipboard.writeText(md);
+                }
+
+                setStatus('copied');
+                setTimeout(() => setStatus('idle'), 2000);
+            } catch (err) {
+                console.error('Export failed:', err);
+                alert(`Failed to copy: ${err}`);
+            }
+        };
+
+        const handleDragStart = (e: React.DragEvent) => {
+            if (!editor) return;
+            const md = exportToMarkdown(editor);
+            e.dataTransfer.setData('text/plain', md);
+            e.dataTransfer.effectAllowed = 'copy';
+            console.log("Drag started with content length:", md.length);
+        };
+
+        return (
+            <button
+                className="icon-btn-ghost"
+                draggable
+                onDragStart={handleDragStart}
+                onClick={handleExport}
+                title="Copy Context for AI (Click or Drag to LLM)"
+                style={{
+                    color: status === 'copied' ? '#10b981' : '#3b82f6', // Blue 500
+                    transition: 'all 0.2s',
+                    cursor: 'grab'
+                }}
+            >
+                {status === 'copied' ? (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                ) : (
+                    // Sparkles Icon (Abstract "AI Context")
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z" />
+                    </svg>
+                )}
+            </button>
+        );
+    };
 
     // --- DB Migration on Mount ---
     useEffect(() => {
@@ -81,6 +147,16 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
 
     useEffect(() => {
         if (!panelRef.current) return;
+
+        // Bridge Diagnostic (Dev/Debug)
+        // @ts-ignore
+        if (!window.electronAPI) {
+            console.error("FATAL: electronAPI missing. Preload script didn't load.");
+            // Show visible alert in Dev to confirm to user that Bridge is broken
+            if (process.env.NODE_ENV === 'development') {
+                alert("Desktop Bridge Missing! Please restart the terminal command `npm run desktop`.");
+            }
+        }
 
         const ro = new ResizeObserver(entries => {
             for (const entry of entries) {
@@ -194,7 +270,15 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
     const editor = useEditor({
         extensions: [
             StarterKit,
-            Markdown,
+            // CodeBlockLowlight removed to restore GFM Import stability
+            // CodeBlockLowlight.configure({
+            //     lowlight,
+            // }),
+            Markdown.configure({
+                transformPastedText: true,
+                transformCopiedText: true,
+                html: false, // Force markdown output
+            }),
             Image.configure({
                 inline: true,
                 allowBase64: true,
@@ -210,6 +294,12 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                 openOnClick: false,
                 autolink: true,
             }),
+            Table.configure({
+                resizable: true,
+            }),
+            TableRow,
+            TableHeader,
+            TableCell,
         ],
         editorProps: {
             attributes: {
@@ -370,19 +460,10 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
         editor.chain().focus();
         switch (type) {
             case 'bold': editor.chain().focus().toggleBold().run(); break;
-            case 'italic': editor.chain().focus().toggleItalic().run(); break;
             case 'h1': editor.chain().focus().toggleHeading({ level: 1 }).run(); break;
             case 'h2': editor.chain().focus().toggleHeading({ level: 2 }).run(); break;
             case 'bullet': editor.chain().focus().toggleBulletList().run(); break;
-            case 'check': editor.chain().focus().toggleTaskList().run(); break;
             case 'code': editor.chain().focus().toggleCodeBlock().run(); break;
-        }
-    };
-
-    const addImage = () => {
-        const url = window.prompt('Image URL');
-        if (url && editor) {
-            editor.chain().focus().setImage({ src: url }).run();
         }
     };
 
@@ -638,6 +719,34 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                     />
                 </div>
 
+                <div className="sidebar-footer" style={{
+                    padding: '12px',
+                    borderTop: '1px solid var(--border-color)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginTop: 'auto' // Push to bottom
+                }}>
+                    <span style={{ fontSize: '10px', color: 'var(--text-secondary)', opacity: 0.8, fontWeight: 500 }}>Networking Interface N AI v1.0.0</span>
+                    <button
+                        className="icon-btn-ghost"
+                        onClick={async () => {
+                            if (confirm('FACTORY RESET: This will delete ALL notes and folders. This cannot be undone.\n\nAre you sure?')) {
+                                await db.resetDatabase();
+                                window.location.reload();
+                            }
+                        }}
+                        title="Factory Reset (Clear Data)"
+                        style={{ color: 'var(--text-secondary)', width: '24px', height: '24px', padding: '4px' }}
+                    >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M3 6h18"></path>
+                            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                        </svg>
+                    </button>
+                </div>
+
                 {zenMode ? (
                     <button className="column-toggle-collapsed" onClick={onToggleZenMode}>
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 5l7 7-7 7" /><path d="M5 5l7 7-7 7" /></svg>
@@ -787,11 +896,37 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
 
             {/* 3. Editor Stage */}
             {showEditor && (
-                <div className="editor-stage">
+                <div
+                    className={`editor-stage ${isCreatingFolder ? 'blur-sm' : ''}`}
+                    onDragOver={(e) => {
+                        e.preventDefault();
+                        e.currentTarget.classList.add('drag-over-active');
+                    }}
+                    onDragLeave={(e) => {
+                        e.preventDefault();
+                        e.currentTarget.classList.remove('drag-over-active');
+                    }}
+                    onDrop={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.currentTarget.classList.remove('drag-over-active');
+
+                        if (!editor) return;
+
+                        // Check if we are dropping a file vs text?
+                        const html = e.dataTransfer.getData('text/html');
+                        const text = e.dataTransfer.getData('text/plain');
+
+                        if (html || text) {
+                            console.log('Global Drop content:', { textLen: text?.length, htmlLen: html?.length });
+                            processSmartPaste(editor, { text, html });
+                        }
+                    }}
+                >
                     {activeNote ? (
                         <>
                             <div className="editor-toolbar-clean">
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                                     {/* Sidebar Toggle (Visible if folders/list hidden) */}
                                     {(!showFolders || !showList) && (
                                         <button
@@ -807,11 +942,14 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                                         </button>
                                     )}
                                     {/* Sidebar Toggle (Visible if folders/list hidden) */}
-                                    <span className="last-edited">
-                                        {isDirty ? 'Saving in background...' : `Last edited ${activeNote.updatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
-                                    </span>
-                                </div>
-                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    {/* InterAI: Export to Clipboard (Clean Markdown) */}
+                                    <ExportButton editor={editor} />
+
+                                    {/* InterAI: Import from Clipboard (Smart Paste) */}
+                                    <ImportButton editor={editor} onImportFromWebview={onImportFromWebview} />
+
+                                    <div style={{ width: '1px', height: '16px', background: 'var(--border-color)', margin: '0 4px' }}></div>
+
                                     {/* PDF Export Button (Requested Icon) */}
                                     <button
                                         className="icon-btn-primary"
@@ -869,7 +1007,7 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                                         }
                                     </button>
 
-                                    <div className="toolbar-divider" style={{ height: '16px', margin: '0 8px' }} />
+                                    <div className="toolbar-divider" style={{ height: '16px', margin: '0' }} />
 
                                     {/* Delete Note Button - Explicitly wired */}
                                     <button
@@ -896,16 +1034,20 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
 
                                 {/* TipTap Toolbar */}
                                 <div className="formatting-toolbar">
-                                    <button onClick={() => toggleFormat('bold')} className={editor?.isActive('bold') ? 'active' : ''} title="Bold"><b>B</b></button>
-                                    <button onClick={() => toggleFormat('italic')} className={editor?.isActive('italic') ? 'active' : ''} title="Italic"><i>I</i></button>
-                                    <div className="toolbar-divider" />
                                     <button onClick={() => toggleFormat('h1')} className={editor?.isActive('heading', { level: 1 }) ? 'active' : ''}>H1</button>
                                     <button onClick={() => toggleFormat('h2')} className={editor?.isActive('heading', { level: 2 }) ? 'active' : ''}>H2</button>
                                     <div className="toolbar-divider" />
-                                    <button onClick={() => toggleFormat('bullet')} className={editor?.isActive('bulletList') ? 'active' : ''}>•</button>
-                                    <button onClick={() => toggleFormat('check')} className={editor?.isActive('taskList') ? 'active' : ''}>☑</button>
-                                    <button onClick={() => toggleFormat('code')} className={editor?.isActive('codeBlock') ? 'active' : ''}>{'<>'}</button>
-                                    <button onClick={addImage} title="Add Image">Img</button>
+                                    <button onClick={() => toggleFormat('bold')} className={editor?.isActive('bold') ? 'active' : ''} title="Bold" style={{ fontWeight: 700 }}>B</button>
+                                    <button onClick={() => toggleFormat('bullet')} className={editor?.isActive('bulletList') ? 'active' : ''} title="Bullet List">•</button>
+                                    <div className="toolbar-divider" />
+                                    <button
+                                        onClick={() => toggleFormat('code')}
+                                        className={editor?.isActive('codeBlock') ? 'active' : ''}
+                                        title="Code Block"
+                                        style={{ width: 'auto', padding: '0 8px', fontSize: '13px' }}
+                                    >
+                                        {'< Code >'}
+                                    </button>
                                 </div>
 
                                 <div className="editor-content-area">
@@ -975,6 +1117,128 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                 </div>
             )}
         </div>
+    );
+};
+
+// Helper for Smart Paste Logic (Reuse for Clipboard + Drop)
+const processSmartPaste = (editor: any, content: { text: string, html: string }) => {
+    if (!content.text && !content.html) return;
+
+    // SMART PASTE LOGIC (SIMPLIFIED):
+    // Prioritize direct HTML insertion. Tiptap's parser and schema will automatically
+    // handle Tables, Lists, and formatting, and strip out unwanted CSS/tags.
+    // This replicates the native "Paste" behavior which users preferred.
+
+    if (content.html && content.html.trim().length > 0) {
+        console.log("Smart Paste: Inserting HTML directly.");
+        editor.chain().focus().insertContent(content.html).run();
+    }
+    else if (content.text) {
+        console.log("Smart Paste: Inserting Text/Markdown.");
+        // If it's just text, it might be Markdown. Tiptap's Markdown extension
+        // might catch it if configured, or we can use our insertMarkdown helper.
+        // Let's use Tiptap's default insertContent which is smart.
+        editor.chain().focus().insertContent(content.text).run();
+    }
+};
+
+// Internal Component for ImportButton
+const ImportButton = ({ editor, onImportFromWebview }: { editor: any, onImportFromWebview?: () => Promise<{ text: string, html: string } | null> }) => {
+    const [status, setStatus] = useState<'idle' | 'pasted' | 'dropping'>('idle');
+
+    const handleImport = async () => {
+        console.log('Import button clicked');
+        if (!editor) return;
+
+        try {
+            let content = { text: '', html: '' };
+            let importedFromWebview = false;
+
+            // 1. Try to get content from Active Webview first (if available)
+            if (onImportFromWebview) {
+                console.log("Attempting to import from webview...");
+                const webviewContent = await onImportFromWebview();
+                if (webviewContent && (webviewContent.text || webviewContent.html)) {
+                    console.log("Imported from webview:", { textLen: webviewContent.text?.length });
+                    content = webviewContent;
+                    importedFromWebview = true;
+                }
+            }
+
+            // 2. Fallback to Clipboard if no webview content
+            if (!importedFromWebview) {
+                // @ts-ignore
+                if (window.electronAPI?.clipboard?.readExtended) {
+                    // @ts-ignore
+                    const data = await window.electronAPI.clipboard.readExtended();
+                    content = { text: data.text, html: data.html };
+                } else {
+                    const t = await navigator.clipboard.readText();
+                    content = { text: t, html: '' };
+                }
+            }
+
+            processSmartPaste(editor, content);
+
+            setStatus('pasted');
+            setTimeout(() => setStatus('idle'), 2000);
+        } catch (err) {
+            console.error('Failed to import:', err);
+            alert(`Failed to import: ${err}`);
+        }
+    };
+
+    const handleDrop = async (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setStatus('idle');
+
+        if (!editor) return;
+
+        const html = e.dataTransfer.getData('text/html');
+        const text = e.dataTransfer.getData('text/plain');
+
+        console.log('Dropped content:', { textLen: text?.length, htmlLen: html?.length });
+
+        processSmartPaste(editor, { text, html });
+        setStatus('pasted');
+        setTimeout(() => setStatus('idle'), 2000);
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        setStatus('dropping');
+    };
+
+    const handleDragLeave = (e: React.DragEvent) => {
+        e.preventDefault();
+        setStatus('idle');
+    };
+
+    return (
+        <button
+            className={`icon-btn-ghost ${status === 'dropping' ? 'ring-2 ring-blue-500 bg-blue-50' : ''}`}
+            onClick={handleImport}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            title="Paste from LLM (Click or Drop Text Here)"
+            style={{
+                color: status === 'pasted' ? '#10b981' : (status === 'dropping' ? '#3b82f6' : '#3b82f6'),
+                transition: 'all 0.2s',
+                transform: status === 'dropping' ? 'scale(1.2)' : 'scale(1)'
+            }}
+        >
+            {status === 'pasted' ? (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            ) : (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="8 12 12 16 16 12"></polyline>
+                    <line x1="12" y1="8" x2="12" y2="16"></line>
+                </svg>
+            )}
+        </button>
     );
 };
 

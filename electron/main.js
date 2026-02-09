@@ -160,7 +160,6 @@ function createWindow() {
     });
 
     // IPC Context Menu (For Webviews)
-    // IPC Context Menu (For Webviews)
     ipcMain.handle('show-context-menu', (event, params) => {
         const guestId = params.webContentsId;
         console.log(`IPC: show-context-menu received. params.mediaType=${params.mediaType}, srcURL=${params.srcURL ? 'YES' : 'NO'}, guestId=${guestId}`);
@@ -174,6 +173,24 @@ function createWindow() {
             // Fallback to main window (better than nothing)
             createContextMenu(params, win.webContents);
         }
+    });
+
+    // --- Clipboard IPC (Robustness Fix) ---
+    ipcMain.handle('clipboard-read', () => {
+        return clipboard.readText();
+    });
+
+    ipcMain.handle('clipboard-read-extended', () => {
+        return {
+            text: clipboard.readText(),
+            html: clipboard.readHTML(),
+            rtf: clipboard.readRTF()
+        };
+    });
+
+    ipcMain.handle('clipboard-write', (event, text) => {
+        clipboard.writeText(text);
+        return true;
     });
 
     // Handle PDF Export

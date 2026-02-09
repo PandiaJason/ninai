@@ -92,6 +92,17 @@ export class NinaiDB extends Dexie {
             console.error("Database populate error:", error);
         }
     }
+    // Helper to Reset Database (Start Fresh)
+    async resetDatabase() {
+        await this.transaction('rw', this.notes, this.folders, async () => {
+            await this.notes.clear();
+            await this.folders.clear();
+        });
+        localStorage.removeItem('ninai_active_note');
+        // Re-populate with defaults immediately? Or let app reload handle it?
+        // Let's add defaults back so it's "New" state, not "Empty" state.
+        await this.populateFromLocalStorage();
+    }
 }
 
 export const db = new NinaiDB();

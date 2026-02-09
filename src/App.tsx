@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Layout } from './components/Layout';
 import { Sidebar } from './components/Sidebar';
 import { NotesPanel } from './components/NotesPanel';
@@ -77,6 +77,27 @@ function App() {
     return <Onboarding onComplete={() => setSetupComplete(true)} />;
   }
 
+  // --- Webview Integration (Smart Paste from Browser) ---
+  const toolRefs = useRef<Record<string, any>>({}); // Store refs to ToolViews
+
+  const handleImportFromWebview = async (): Promise<{ text: string, html: string } | null> => {
+    const activeRef = toolRefs.current[activeToolId];
+    if (!activeRef) return null;
+
+    try {
+      const html = await activeRef.getSelectionHTML();
+      if (html) {
+        // Create a temporary element to strip text
+        const temp = document.createElement('div');
+        temp.innerHTML = html;
+        return { text: temp.innerText, html };
+      }
+    } catch (e) {
+      console.error("Failed to import from webview:", e);
+    }
+    return null;
+  };
+
   return (
     <Layout
       sidebar={
@@ -91,7 +112,13 @@ function App() {
           onDeleteTool={handleDeleteTool}
         />
       }
-      insightPanel={<NotesPanel zenMode={zenMode} onToggleZenMode={() => setZenMode(!zenMode)} />}
+      insightPanel={(
+        <NotesPanel
+          zenMode={zenMode}
+          onToggleZenMode={() => setZenMode(!zenMode)}
+          onImportFromWebview={handleImportFromWebview}
+        />
+      )}
       zenMode={zenMode}
       // Pass hoisted state
       isSidebarOpen={isSidebarOpen}
@@ -110,6 +137,10 @@ function App() {
           }}
         >
           <ToolView
+            ref={(el) => {
+              if (el) toolRefs.current[tool.id] = el;
+              else delete toolRefs.current[tool.id];
+            }}
             tool={tool}
             onMaximize={maximizeBrowser}
             isMaximized={!isSidebarOpen && !isNotesOpen} // Optional visual feedback
