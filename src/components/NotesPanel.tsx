@@ -19,6 +19,8 @@ import './NotesPanel.css';
 import { useDebounce } from '../hooks/useDebounce';
 import { FolderList } from './FolderList';
 import { exportToMarkdown, insertMarkdown } from '../services/llm';
+import TurndownService from 'turndown';
+import { gfm } from 'turndown-plugin-gfm';
 
 interface NotesPanelProps {
     zenMode?: boolean;
@@ -1111,7 +1113,7 @@ const processSmartPaste = (editor: any, content: { text: string, html: string })
 
     // 2. Handle Text Content (which might be escaped HTML from some LLMs)
     if (content.text) {
-        // Manual decoding to be 100% sure (DOM methods can be flaky in some contexts)
+        // Manual decoding to be 100% sure
         const decoded = content.text
             .replace(/&lt;/g, '<')
             .replace(/&gt;/g, '>')
@@ -1121,21 +1123,38 @@ const processSmartPaste = (editor: any, content: { text: string, html: string })
 
         console.log("Smart Paste: Decoded content:", decoded.substring(0, 50) + "...");
 
-        // Detection: Does the DECODED text look like HTML tags?
-        // Check for common block tags: <p, <div, <ul, <ol, <h1-h6, <table
+        // Check for HTML structure
         const hasBlockTags = /<(p|div|ul|ol|h[1-6]|table|blockquote|pre|code)/i.test(decoded);
 
         if (hasBlockTags || (decoded.includes('<') && decoded.includes('>'))) {
-            console.log("Smart Paste: Decoded text is HTML -> Inserting as HTML");
-            // We insert it as HTML content, which Tiptap parses into formatting
-            editor.chain().focus().insertContent(decoded).run();
+            console.log("Smart Paste: Decoded text is HTML -> Converting to Markdown");
+
+            // Webview often gives HTML. User wants "Markdown like ChatGPT".
+            // So we convert HTML -> Markdown using Turndown
+            const turndownService = new TurndownService({
+                headingStyle: 'atx',
+                codeBlockStyle: 'fenced'
+            });
+            turndownService.use(gfm);
+
+            const markdown = turndownService.turndown(decoded);
+            console.log("Smart Paste: Converted to Markdown:", markdown.substring(0, 50) + "...");
+
+            insertMarkdown(editor, markdown);
         } else {
-            console.log("Smart Paste: Decoded text is Markdown/Text -> Using Markdown Parser");
+            console.log("Smart Paste: Text seems like Markdown/Plain -> Using Markdown Parser");
             insertMarkdown(editor, decoded);
         }
     } else if (content.html) {
-        // Fallback for html-only content that isn't a table
-        editor.chain().focus().insertContent(content.html).run();
+        // Fallback: If we only have HTML and no text, convert it to MD too for consistency
+        console.log("Smart Paste: HTML-only content -> Converting to Markdown");
+        const turndownService = new TurndownService({
+            headingStyle: 'atx',
+            codeBlockStyle: 'fenced'
+        });
+        turndownService.use(gfm);
+        const markdown = turndownService.turndown(content.html);
+        insertMarkdown(editor, markdown);
     }
 };
 
