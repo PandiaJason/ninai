@@ -1002,6 +1002,18 @@ li[data-type="taskItem"] p {
     width: 100% !important;
 }
 
+/* Active Node Highlight */
+.ProseMirror-selectednode {
+    outline: 2px solid var(--accent-primary);
+    background-color: rgba(66, 133, 244, 0.1);
+    border-radius: 4px;
+}
+
+/* Ensure full width for children */
+.ProseMirror>* {
+    max-width: 100%;
+}
+
 .ProseMirror>*:first-child {
     margin-top: 0 !important;
 }
