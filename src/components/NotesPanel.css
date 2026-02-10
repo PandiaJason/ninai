@@ -407,7 +407,8 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0 32px;
+    padding: 0 12px;
+    /* Reduced from 32px */
     color: var(--text-tertiary);
     font-size: 0.75rem;
     -webkit-app-region: drag;
@@ -436,7 +437,8 @@
     margin: 0;
     /* Remove centering margin */
     width: 100%;
-    padding: 0 32px;
+    padding: 0 12px;
+    /* Reduced from 32px */
     display: flex;
     flex-direction: column;
     overflow: hidden;
