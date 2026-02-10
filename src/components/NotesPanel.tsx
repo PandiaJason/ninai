@@ -119,7 +119,7 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
 
     // --- Resizing Logic ---
     const [folderWidth, setFolderWidth] = useState(200);
-    const [listWidth, setListWidth] = useState(220);
+    const [listWidth, setListWidth] = useState(300);
     const isResizing = useRef<null | 'folder' | 'list'>(null);
 
     useEffect(() => {
