@@ -1064,3 +1064,19 @@ li[data-type="taskItem"] p {
     background-color: var(--accent-primary);
     pointer-events: none;
 }
+
+/* Active Block Highlight */
+.active-block {
+    background-color: rgba(59, 130, 246, 0.08);
+    /* Blue tint */
+    border-radius: 4px;
+    box-shadow: -3px 0 0 var(--accent-primary);
+    /* Left indicator */
+    transition: background-color 0.1s;
+}
+
+/* Task Item Focus (Double check) */
+li[data-type="taskItem"]:focus-within {
+    background-color: rgba(59, 130, 246, 0.05);
+    border-radius: 4px;
+}

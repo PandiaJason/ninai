@@ -13,6 +13,9 @@ import { TableRow } from '@tiptap/extension-table-row';
 import { TableCell } from '@tiptap/extension-table-cell';
 import { TableHeader } from '@tiptap/extension-table-header';
 import { DOMParser as ProseMirrorDOMParser } from '@tiptap/pm/model';
+import { Extension } from '@tiptap/core';
+import { Plugin, PluginKey } from '@tiptap/pm/state';
+import { Decoration, DecorationSet } from '@tiptap/pm/view';
 
 import { db } from '../db';
 import type { Note } from '../db';
@@ -248,6 +251,54 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
         debouncedUpdateNote(activeNoteId, { [field]: value });
     };
 
+    // Extension for highlighting the active block
+    const ActiveBlockHighlight = Extension.create({
+        name: 'activeBlockHighlight',
+        addProseMirrorPlugins() {
+            return [
+                new Plugin({
+                    key: new PluginKey('activeBlockHighlight'),
+                    props: {
+                        decorations(state) {
+                            const { selection } = state;
+                            const { $from } = selection;
+                            // Decorations to return
+                            const decorations: Decoration[] = [];
+
+                            // Find the block/node at the cursor
+                            // We want to highlight the direct child of doc or the closest block container?
+                            // Usually depth 1 is doc, depth 2 is paragraph.
+                            // But let's just highlight the parent node of the selection.
+                            // However, we want the block-level element like P, H1, H2, LI...
+
+                            // Walk up from current depth to find a block node
+                            let currentDepth = $from.depth;
+                            let node = $from.node(currentDepth);
+
+                            // If it's text node (which tiptap handles abstractly, but in PM selection is in text usually inside a block)
+                            // $from.parent is the block containing the text.
+                            // So usually just $from.depth is enough.
+
+                            // Safety check
+                            if ($from.depth > 0) {
+                                // Calculate the start pos of the node
+                                const startPos = $from.before(currentDepth);
+                                // Decoration.node applies class to the node wrapper
+                                decorations.push(
+                                    Decoration.node(startPos, startPos + node.nodeSize, {
+                                        class: 'active-block',
+                                    })
+                                );
+                            }
+
+                            return DecorationSet.create(state.doc, decorations);
+                        },
+                    },
+                }),
+            ];
+        },
+    });
+
     const editor = useEditor({
         extensions: [
             StarterKit,
@@ -288,6 +339,7 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
             TableRow,
             TableHeader,
             TableCell,
+            ActiveBlockHighlight,
         ],
         editorProps: {
             attributes: {
@@ -433,55 +485,7 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
             }
         });
 
-        // --- Active Block Highlight Logic ---
-        const updateActiveBlock = () => {
-            if (!editor || !editor.view || !editor.view.dom) return;
 
-            // Remove existing
-            const existing = editor.view.dom.querySelectorAll('.active-block');
-            existing.forEach(el => el.classList.remove('active-block'));
-
-            // Add new
-            if (editor.isFocused) {
-                const { from } = editor.state.selection;
-                try {
-                    const domInfo = editor.view.domAtPos(from);
-                    let node = domInfo.node;
-                    // If text node, get parent
-                    if (node.nodeType === 3) { // TEXT_NODE
-                        node = node.parentElement as HTMLElement;
-                    }
-                    if (node && (node as HTMLElement).classList) {
-                        // Ensure we are inside the editor content
-                        const el = node as HTMLElement;
-                        // Avoid highlighting the entire editor div
-                        if (!el.classList.contains('ProseMirror')) {
-                            el.classList.add('active-block');
-                        }
-                    }
-                } catch (e) {
-                    // Ignore range errors
-                }
-            }
-        };
-
-        editor.on('selectionUpdate', updateActiveBlock);
-        editor.on('focus', updateActiveBlock);
-        editor.on('blur', () => {
-            if (editor && editor.view && editor.view.dom) {
-                const existing = editor.view.dom.querySelectorAll('.active-block');
-                existing.forEach(el => el.classList.remove('active-block'));
-            }
-        });
-
-        // Trigger once
-        updateActiveBlock();
-
-        return () => {
-            editor.off('selectionUpdate', updateActiveBlock);
-            editor.off('focus', updateActiveBlock);
-            editor.off('blur');
-        };
 
     }, [editor]);
 
