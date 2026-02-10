@@ -43,6 +43,12 @@ export const Layout: React.FC<LayoutProps> = ({
         setPanelWidth(widthRef.current);
     }, []);
 
+    const resetWidth = React.useCallback(() => {
+        const half = window.innerWidth * 0.5;
+        setPanelWidth(half);
+        widthRef.current = half;
+    }, []);
+
     const resize = React.useCallback(
         (mouseMoveEvent: MouseEvent) => {
             if (isResizing && panelRef.current) {
@@ -129,6 +135,7 @@ export const Layout: React.FC<LayoutProps> = ({
                     ref={resizerRef}
                     className="resizer"
                     onMouseDown={startResizing}
+                    onDoubleClick={resetWidth} // Feature: Double-click to split equally
                     style={{ right: panelWidth - 6 }} // Initial pos
                 />
             )}
