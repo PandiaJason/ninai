@@ -994,6 +994,18 @@ li[data-type="taskItem"] p {
 }
 
 /* Editor Table Styles (ProseMirror) */
+.ProseMirror {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: none !important;
+    outline: none !important;
+    width: 100% !important;
+}
+
+.ProseMirror>*:first-child {
+    margin-top: 0 !important;
+}
+
 .ProseMirror table {
     border-collapse: collapse;
     table-layout: fixed;
