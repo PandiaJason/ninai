@@ -427,660 +427,663 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
             return false;
         };
 
-        handlePaste: handlePasteHandler
-    }
+        editor.setOptions({
+            editorProps: {
+                handlePaste: handlePasteHandler
+            }
         });
 
-// --- Active Block Highlight Logic ---
-const updateActiveBlock = () => {
-    if (!editor || !editor.view || !editor.view.dom) return;
+        // --- Active Block Highlight Logic ---
+        const updateActiveBlock = () => {
+            if (!editor || !editor.view || !editor.view.dom) return;
 
-    // Remove existing
-    const existing = editor.view.dom.querySelectorAll('.active-block');
-    existing.forEach(el => el.classList.remove('active-block'));
+            // Remove existing
+            const existing = editor.view.dom.querySelectorAll('.active-block');
+            existing.forEach(el => el.classList.remove('active-block'));
 
-    // Add new
-    if (editor.isFocused) {
-        const { from } = editor.state.selection;
-        try {
-            const domInfo = editor.view.domAtPos(from);
-            let node = domInfo.node;
-            // If text node, get parent
-            if (node.nodeType === 3) { // TEXT_NODE
-                node = node.parentElement as HTMLElement;
-            }
-            if (node && (node as HTMLElement).classList) {
-                // Ensure we are inside the editor content
-                const el = node as HTMLElement;
-                // Avoid highlighting the entire editor div
-                if (!el.classList.contains('ProseMirror')) {
-                    el.classList.add('active-block');
+            // Add new
+            if (editor.isFocused) {
+                const { from } = editor.state.selection;
+                try {
+                    const domInfo = editor.view.domAtPos(from);
+                    let node = domInfo.node;
+                    // If text node, get parent
+                    if (node.nodeType === 3) { // TEXT_NODE
+                        node = node.parentElement as HTMLElement;
+                    }
+                    if (node && (node as HTMLElement).classList) {
+                        // Ensure we are inside the editor content
+                        const el = node as HTMLElement;
+                        // Avoid highlighting the entire editor div
+                        if (!el.classList.contains('ProseMirror')) {
+                            el.classList.add('active-block');
+                        }
+                    }
+                } catch (e) {
+                    // Ignore range errors
                 }
             }
-        } catch (e) {
-            // Ignore range errors
-        }
-    }
-};
+        };
 
-editor.on('selectionUpdate', updateActiveBlock);
-editor.on('focus', updateActiveBlock);
-editor.on('blur', () => {
-    // Optional: Keep highlight or remove on blur? User said "while in notes typing", implies focus.
-    // Let's remove on blur to be clean.
-    if (editor && editor.view && editor.view.dom) {
-        const existing = editor.view.dom.querySelectorAll('.active-block');
-        existing.forEach(el => el.classList.remove('active-block'));
-    }
-});
+        editor.on('selectionUpdate', updateActiveBlock);
+        editor.on('focus', updateActiveBlock);
+        editor.on('blur', () => {
+            if (editor && editor.view && editor.view.dom) {
+                const existing = editor.view.dom.querySelectorAll('.active-block');
+                existing.forEach(el => el.classList.remove('active-block'));
+            }
+        });
 
-return () => {
-    editor.off('selectionUpdate', updateActiveBlock);
-    editor.off('focus', updateActiveBlock);
-    editor.off('blur');
-};
+        // Trigger once
+        updateActiveBlock();
+
+        return () => {
+            editor.off('selectionUpdate', updateActiveBlock);
+            editor.off('focus', updateActiveBlock);
+            editor.off('blur');
+        };
 
     }, [editor]);
 
 
-// Content Sync Logic
-const previousNoteIdRef = useRef<string | null>(null);
-const [localTitle, setLocalTitle] = useState('');
+    // Content Sync Logic
+    const previousNoteIdRef = useRef<string | null>(null);
+    const [localTitle, setLocalTitle] = useState('');
 
-useEffect(() => {
-    if (!editor || !activeNote) return;
-    if (activeNote.id !== previousNoteIdRef.current) {
-        setLocalTitle(activeNote.title);
-        editor.commands.setContent(activeNote.content, { emitUpdate: false });
-        previousNoteIdRef.current = activeNote.id;
-    }
-}, [activeNote, editor]);
-
-
-// Formatting Helpers
-const toggleFormat = (type: string) => {
-    if (!editor) return;
-    editor.chain().focus();
-    switch (type) {
-        case 'bold': editor.chain().focus().toggleBold().run(); break;
-        case 'italic': editor.chain().focus().toggleItalic().run(); break;
-        case 'h1': editor.chain().focus().toggleHeading({ level: 1 }).run(); break;
-        case 'h2': editor.chain().focus().toggleHeading({ level: 2 }).run(); break;
-        case 'h3': editor.chain().focus().toggleHeading({ level: 3 }).run(); break;
-        case 'paragraph': editor.chain().focus().setParagraph().run(); break; // New Body action
-        case 'bullet': editor.chain().focus().toggleBulletList().run(); break;
-        case 'task': editor.chain().focus().toggleTaskList().run(); break;
-        case 'code': editor.chain().focus().toggleCodeBlock().run(); break;
-    }
-};
-
-// --- CRUD ---
-const createNote = async () => {
-    const targetFolder = activeFolderId === 'all' ? 'ninai' : activeFolderId;
-    const newId = Date.now().toString();
-    const newNote: Note = {
-        id: newId,
-        folderId: targetFolder,
-        title: '',
-        content: '', // Empty HTML
-        updatedAt: new Date()
-    };
-    await db.notes.add(newNote);
-    setActiveNoteId(newId);
-};
-
-const folderInputRef = useRef<HTMLInputElement>(null);
-
-useEffect(() => {
-    if (isCreatingFolder && folderInputRef.current) {
-        folderInputRef.current.focus();
-    }
-}, [isCreatingFolder]);
-
-const createFolder = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!showFolders) setShowFolders(true); // Ensure sidebar is visible
-    setIsCreatingFolder(true);
-};
-
-const confirmCreateFolder = async () => {
-    if (newFolderName.trim()) {
-        const newId = Date.now().toString();
-        await db.folders.add({
-            id: newId,
-            name: newFolderName,
-            icon: 'Folder'
-        });
-        setActiveFolderId(newId);
-        setNewFolderName('');
-        setIsCreatingFolder(false);
-    } else {
-        setIsCreatingFolder(false);
-    }
-};
-
-const deleteNote = async (noteId?: string) => {
-    const idToDelete = noteId || activeNoteId;
-    if (!idToDelete) return;
-    await db.notes.delete(idToDelete);
-    if (activeNoteId === idToDelete) setActiveNoteId(null);
-};
-
-const deleteFolder = async (id: string) => {
-    if (id === 'all' || id === 'ninai') {
-        alert("Cannot delete default folders.");
-        return;
-    }
-    if (confirm('Delete this folder and its notes?')) {
-        await db.folders.delete(id);
-        await db.notes.where('folderId').equals(id).delete();
-        if (activeFolderId === id) setActiveFolderId('ninai');
-    }
-};
-
-const downloadMarkdown = () => {
-    if (!activeNote || !editor) return;
-    const title = activeNote.title || 'Untitled Note';
-    const markdownContent = (editor.storage as any).markdown.getMarkdown();
-
-    const element = document.createElement("a");
-    const file = new Blob([`# ${title}\n\n${markdownContent}`], { type: 'text/markdown' });
-    element.href = URL.createObjectURL(file);
-    element.download = `${title.replace(/\s+/g, '_')}.md`;
-    document.body.appendChild(element);
-    element.click();
-    document.body.removeChild(element);
-};
-
-const [noteMenu, setNoteMenu] = useState<{ x: number, y: number, noteId: string } | null>(null);
-
-useEffect(() => {
-    const closeMenu = () => { setNoteMenu(null); };
-    window.addEventListener('click', closeMenu);
-    return () => window.removeEventListener('click', closeMenu);
-}, []);
-
-const handleNoteContextMenu = React.useCallback((e: React.MouseEvent, noteId: string) => {
-    e.preventDefault();
-    setNoteMenu({ x: e.clientX, y: e.clientY, noteId });
-}, []);
-
-const [moveTarget, setMoveTarget] = useState<{ type: 'note' | 'folder', id: string } | null>(null);
-const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
-
-const handleMoveFolder = async (activeId: string, overId: string) => {
-    const active = folders.find(f => f.id === activeId);
-    const over = folders.find(f => f.id === overId);
-    if (active && over && active.parentId === over.parentId) {
-        const tempOrder = active.order;
-        await db.folders.update(activeId, { order: over.order });
-        await db.folders.update(overId, { order: tempOrder });
-    }
-};
-
-const handleMoveItem = async (targetId: string) => {
-    if (!moveTarget) return;
-
-    if (moveTarget.type === 'note') {
-        await db.notes.update(moveTarget.id, { folderId: targetId });
-    } else {
-        let current = folders.find(f => f.id === targetId);
-        let invalid = false;
-        while (current) {
-            if (current.id === moveTarget.id) {
-                invalid = true;
-                break;
-            }
-            if (!current.parentId) break;
-            current = folders.find(f => f.id === current?.parentId);
+    useEffect(() => {
+        if (!editor || !activeNote) return;
+        if (activeNote.id !== previousNoteIdRef.current) {
+            setLocalTitle(activeNote.title);
+            editor.commands.setContent(activeNote.content, { emitUpdate: false });
+            previousNoteIdRef.current = activeNote.id;
         }
+    }, [activeNote, editor]);
 
-        if (invalid) {
-            alert("Cannot move a folder into its own subfolder.");
+
+    // Formatting Helpers
+    const toggleFormat = (type: string) => {
+        if (!editor) return;
+        editor.chain().focus();
+        switch (type) {
+            case 'bold': editor.chain().focus().toggleBold().run(); break;
+            case 'italic': editor.chain().focus().toggleItalic().run(); break;
+            case 'h1': editor.chain().focus().toggleHeading({ level: 1 }).run(); break;
+            case 'h2': editor.chain().focus().toggleHeading({ level: 2 }).run(); break;
+            case 'h3': editor.chain().focus().toggleHeading({ level: 3 }).run(); break;
+            case 'paragraph': editor.chain().focus().setParagraph().run(); break; // New Body action
+            case 'bullet': editor.chain().focus().toggleBulletList().run(); break;
+            case 'task': editor.chain().focus().toggleTaskList().run(); break;
+            case 'code': editor.chain().focus().toggleCodeBlock().run(); break;
+        }
+    };
+
+    // --- CRUD ---
+    const createNote = async () => {
+        const targetFolder = activeFolderId === 'all' ? 'ninai' : activeFolderId;
+        const newId = Date.now().toString();
+        const newNote: Note = {
+            id: newId,
+            folderId: targetFolder,
+            title: '',
+            content: '', // Empty HTML
+            updatedAt: new Date()
+        };
+        await db.notes.add(newNote);
+        setActiveNoteId(newId);
+    };
+
+    const folderInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (isCreatingFolder && folderInputRef.current) {
+            folderInputRef.current.focus();
+        }
+    }, [isCreatingFolder]);
+
+    const createFolder = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!showFolders) setShowFolders(true); // Ensure sidebar is visible
+        setIsCreatingFolder(true);
+    };
+
+    const confirmCreateFolder = async () => {
+        if (newFolderName.trim()) {
+            const newId = Date.now().toString();
+            await db.folders.add({
+                id: newId,
+                name: newFolderName,
+                icon: 'Folder'
+            });
+            setActiveFolderId(newId);
+            setNewFolderName('');
+            setIsCreatingFolder(false);
+        } else {
+            setIsCreatingFolder(false);
+        }
+    };
+
+    const deleteNote = async (noteId?: string) => {
+        const idToDelete = noteId || activeNoteId;
+        if (!idToDelete) return;
+        await db.notes.delete(idToDelete);
+        if (activeNoteId === idToDelete) setActiveNoteId(null);
+    };
+
+    const deleteFolder = async (id: string) => {
+        if (id === 'all' || id === 'ninai') {
+            alert("Cannot delete default folders.");
             return;
         }
-        if (targetId === moveTarget.id) return;
-
-        await db.folders.update(moveTarget.id, { parentId: targetId === 'root' ? undefined : targetId });
-    }
-    setMoveTarget(null);
-};
-
-const folderOptions = React.useMemo(() => {
-    const list: { id: string, name: string, depth: number }[] = [];
-    const traverse = (pid: string | undefined, depth: number) => {
-        const children = folders.filter(f => (f.parentId || 'root') === (pid || 'root')).sort((a, b) => (a.order || 0) - (b.order || 0));
-        children.forEach(f => {
-            if (f.id !== 'all') {
-                list.push({ id: f.id, name: f.name, depth });
-                traverse(f.id, depth + 1);
-            }
-        });
+        if (confirm('Delete this folder and its notes?')) {
+            await db.folders.delete(id);
+            await db.notes.where('folderId').equals(id).delete();
+            if (activeFolderId === id) setActiveFolderId('ninai');
+        }
     };
-    traverse(undefined, 0);
-    return list;
-}, [folders]);
+
+    const downloadMarkdown = () => {
+        if (!activeNote || !editor) return;
+        const title = activeNote.title || 'Untitled Note';
+        const markdownContent = (editor.storage as any).markdown.getMarkdown();
+
+        const element = document.createElement("a");
+        const file = new Blob([`# ${title}\n\n${markdownContent}`], { type: 'text/markdown' });
+        element.href = URL.createObjectURL(file);
+        element.download = `${title.replace(/\s+/g, '_')}.md`;
+        document.body.appendChild(element);
+        element.click();
+        document.body.removeChild(element);
+    };
+
+    const [noteMenu, setNoteMenu] = useState<{ x: number, y: number, noteId: string } | null>(null);
+
+    useEffect(() => {
+        const closeMenu = () => { setNoteMenu(null); };
+        window.addEventListener('click', closeMenu);
+        return () => window.removeEventListener('click', closeMenu);
+    }, []);
+
+    const handleNoteContextMenu = React.useCallback((e: React.MouseEvent, noteId: string) => {
+        e.preventDefault();
+        setNoteMenu({ x: e.clientX, y: e.clientY, noteId });
+    }, []);
+
+    const [moveTarget, setMoveTarget] = useState<{ type: 'note' | 'folder', id: string } | null>(null);
+    const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
+
+    const handleMoveFolder = async (activeId: string, overId: string) => {
+        const active = folders.find(f => f.id === activeId);
+        const over = folders.find(f => f.id === overId);
+        if (active && over && active.parentId === over.parentId) {
+            const tempOrder = active.order;
+            await db.folders.update(activeId, { order: over.order });
+            await db.folders.update(overId, { order: tempOrder });
+        }
+    };
+
+    const handleMoveItem = async (targetId: string) => {
+        if (!moveTarget) return;
+
+        if (moveTarget.type === 'note') {
+            await db.notes.update(moveTarget.id, { folderId: targetId });
+        } else {
+            let current = folders.find(f => f.id === targetId);
+            let invalid = false;
+            while (current) {
+                if (current.id === moveTarget.id) {
+                    invalid = true;
+                    break;
+                }
+                if (!current.parentId) break;
+                current = folders.find(f => f.id === current?.parentId);
+            }
+
+            if (invalid) {
+                alert("Cannot move a folder into its own subfolder.");
+                return;
+            }
+            if (targetId === moveTarget.id) return;
+
+            await db.folders.update(moveTarget.id, { parentId: targetId === 'root' ? undefined : targetId });
+        }
+        setMoveTarget(null);
+    };
+
+    const folderOptions = React.useMemo(() => {
+        const list: { id: string, name: string, depth: number }[] = [];
+        const traverse = (pid: string | undefined, depth: number) => {
+            const children = folders.filter(f => (f.parentId || 'root') === (pid || 'root')).sort((a, b) => (a.order || 0) - (b.order || 0));
+            children.forEach(f => {
+                if (f.id !== 'all') {
+                    list.push({ id: f.id, name: f.name, depth });
+                    traverse(f.id, depth + 1);
+                }
+            });
+        };
+        traverse(undefined, 0);
+        return list;
+    }, [folders]);
 
 
-const noteCounts = React.useMemo(() => {
-    const counts: { [key: string]: number } = {};
-    counts['all'] = notes.length;
-    folders.forEach(f => {
-        if (f.id === 'all') return;
-        counts[f.id] = notes.filter(n => n.folderId === f.id).length;
-    });
-    return counts;
-}, [notes, folders]);
+    const noteCounts = React.useMemo(() => {
+        const counts: { [key: string]: number } = {};
+        counts['all'] = notes.length;
+        folders.forEach(f => {
+            if (f.id === 'all') return;
+            counts[f.id] = notes.filter(n => n.folderId === f.id).length;
+        });
+        return counts;
+    }, [notes, folders]);
 
-return (
-    <div className="notes-panel" ref={panelRef}>
-        {/* 1. Folders Sidebar */}
-        <div
-            className={`folders-sidebar ${!showFolders ? 'collapsed' : ''}`}
-            style={{ width: showFolders ? folderWidth : undefined }}
-        >
-            <header className="notes-header-minimal">
-                <span className="folder-title-display">Folders</span>
-                <button className="icon-btn-ghost" onClick={createFolder} title="New Folder">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-                        <line x1="12" y1="11" x2="12" y2="17"></line>
-                        <line x1="9" y1="14" x2="15" y2="14"></line>
-                    </svg>
-                </button>
-            </header>
+    return (
+        <div className="notes-panel" ref={panelRef}>
+            {/* 1. Folders Sidebar */}
+            <div
+                className={`folders-sidebar ${!showFolders ? 'collapsed' : ''}`}
+                style={{ width: showFolders ? folderWidth : undefined }}
+            >
+                <header className="notes-header-minimal">
+                    <span className="folder-title-display">Folders</span>
+                    <button className="icon-btn-ghost" onClick={createFolder} title="New Folder">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                            <line x1="12" y1="11" x2="12" y2="17"></line>
+                            <line x1="9" y1="14" x2="15" y2="14"></line>
+                        </svg>
+                    </button>
+                </header>
 
-            <div className="folders-list-container">
-                {isCreatingFolder && (
-                    <div className="folder-item active" style={{ cursor: 'default', margin: '0 12px' }}>
-                        <span className="folder-icon">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-                        </span>
-                        <input
-                            ref={folderInputRef}
-                            autoFocus
-                            className="folder-input-inline"
-                            value={newFolderName}
-                            onChange={(e) => setNewFolderName(e.target.value)}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter') confirmCreateFolder();
-                                if (e.key === 'Escape') setIsCreatingFolder(false);
-                            }}
-                            placeholder="Name..."
-                        />
-                    </div>
-                )}
-
-                {searchTerm && <div className="section-label">Results</div>}
-
-                <FolderList
-                    folders={filteredFolders}
-                    activeFolderId={activeFolderId}
-                    onSelectFolder={setActiveFolderId}
-                    onRenameFolder={async (id, name) => {
-                        await db.folders.update(id, { name });
-                    }}
-                    onDeleteFolder={deleteFolder}
-                    onMoveFolder={handleMoveFolder}
-                    onCreateSubfolder={async (parentId) => {
-                        const newId = Date.now().toString();
-                        await db.folders.add({
-                            id: newId,
-                            name: 'New Subfolder',
-                            parentId: parentId,
-                            order: 999,
-                            icon: 'Folder'
-                        });
-                        setActiveFolderId(newId);
-                    }}
-                    onRequestMove={(folderId) => setMoveTarget({ type: 'folder', id: folderId })}
-                    noteCounts={noteCounts}
-                    editingFolderId={editingFolderId}
-                    setEditingFolderId={setEditingFolderId}
-                />
-            </div>
-
-            {zenMode ? (
-                <button className="column-toggle-collapsed" onClick={onToggleZenMode}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 5l7 7-7 7" /><path d="M5 5l7 7-7 7" /></svg>
-                </button>
-            ) : (
-                <button className="column-toggle" onClick={onToggleZenMode}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 19l-7-7 7-7" /><path d="M19 19l-7-7 7-7" /></svg>
-                </button>
-            )}
-
-            {showFolders && <div className="panel-resizer" onMouseDown={startResizing('folder')} />}
-        </div>
-
-        {/* 2. Notes List */}
-        <div
-            className={`notes-list-col ${!showList ? 'collapsed' : ''} ${!showEditor ? 'expanded' : ''}`}
-            style={{ width: showList && showEditor ? listWidth : undefined }}
-        >
-            {showList && (
-                <>
-                    <header className="notes-header-minimal">
-                        <span className="folder-title-display">{folders.find(f => f.id === activeFolderId)?.name || 'All Notes'}</span>
-                        <button className="icon-btn-primary" onClick={createNote} title="New Note">
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                            </svg>
-                        </button>
-                    </header>
-                    <div style={{ padding: '0 8px 12px' }}>
-                        <div className="search-wrapper">
-                            <span className="search-icon">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                <div className="folders-list-container">
+                    {isCreatingFolder && (
+                        <div className="folder-item active" style={{ cursor: 'default', margin: '0 12px' }}>
+                            <span className="folder-icon">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
                             </span>
                             <input
-                                className="notes-search-bar"
-                                placeholder="Search"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                            />
-                        </div>
-                    </div>
-                </>
-            )}
-            {showList && (
-                <div className="notes-scroller">
-                    {(() => {
-                        const now = new Date();
-                        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                        const yesterday = new Date(today);
-                        yesterday.setDate(yesterday.getDate() - 1);
-                        const last7Days = new Date(today);
-                        last7Days.setDate(last7Days.getDate() - 7);
-                        const last30Days = new Date(today);
-                        last30Days.setDate(last30Days.getDate() - 30);
-
-                        const groups: { [key: string]: typeof displayNotes } = {};
-                        const groupOrder: string[] = [];
-
-                        displayNotes.forEach(note => {
-                            const noteDate = new Date(note.updatedAt);
-                            const dateOnly = new Date(noteDate.getFullYear(), noteDate.getMonth(), noteDate.getDate());
-
-                            let groupName = '';
-                            if (dateOnly.getTime() === today.getTime()) {
-                                groupName = 'Today';
-                            } else if (dateOnly.getTime() === yesterday.getTime()) {
-                                groupName = 'Yesterday';
-                            } else if (dateOnly > last7Days) {
-                                groupName = 'Previous 7 Days';
-                            } else if (dateOnly > last30Days) {
-                                groupName = 'Previous 30 Days';
-                            } else {
-                                groupName = noteDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-                            }
-
-                            if (!groups[groupName]) {
-                                groups[groupName] = [];
-                                groupOrder.push(groupName);
-                            }
-                            groups[groupName].push(note);
-                        });
-
-                        if (displayNotes.length === 0) {
-                            return (
-                                <div className="empty-state" style={{ padding: '40px 20px', textAlign: 'center', opacity: 0.5 }}>
-                                    No notes found
-                                </div>
-                            );
-                        }
-
-                        return groupOrder.map(group => (
-                            <div key={group} className="notes-group">
-                                <h5 className="notes-group-header">{group}</h5>
-                                {groups[group].map(note => (
-                                    <NotePreviewCard
-                                        key={note.id}
-                                        note={note}
-                                        isActive={activeNoteId === note.id}
-                                        onSelect={handleNoteClick}
-                                        onContextMenu={handleNoteContextMenu}
-                                    />
-                                ))}
-                            </div>
-                        ));
-                    })()}
-                </div>
-            )}
-            {noteMenu && (
-                <>
-                    <div className="context-menu-backdrop" onClick={() => setNoteMenu(null)} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />
-                    <div className="context-menu" style={{ top: noteMenu.y, left: noteMenu.x, zIndex: 100 }}>
-                        <button onClick={() => { setMoveTarget({ type: 'note', id: noteMenu.noteId }); setNoteMenu(null); }} className="menu-item">Move to...</button>
-                        <div className="menu-divider" />
-                        <button onClick={() => deleteNote(noteMenu.noteId)} className="menu-item delete">Delete Note</button>
-                    </div>
-                </>
-            )}
-
-            {showList && showEditor && <div className="panel-resizer" onMouseDown={startResizing('list')} />}
-        </div>
-
-        {/* 3. Editor Stage */}
-        {showEditor && (
-            <div
-                className={`editor-stage ${isCreatingFolder ? 'blur-sm' : ''}`}
-                onDragOver={(e) => {
-                    e.preventDefault();
-                    e.currentTarget.classList.add('drag-over-active');
-                }}
-                onDragLeave={(e) => {
-                    e.preventDefault();
-                    e.currentTarget.classList.remove('drag-over-active');
-                }}
-                onDrop={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    e.currentTarget.classList.remove('drag-over-active');
-                    if (!editor) return;
-                    const html = e.dataTransfer.getData('text/html');
-                    const text = e.dataTransfer.getData('text/plain');
-                    if (html || text) {
-                        processSmartPaste(editor, { text, html });
-                    }
-                }}
-            >
-                {activeNote ? (
-                    <>
-                        <div className="editor-toolbar-clean">
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                {(!showFolders || !showList) && (
-                                    <button
-                                        className="icon-btn-ghost"
-                                        onClick={() => { setShowFolders(true); setShowList(true); }}
-                                        title="Show Sidebars"
-                                        style={{ marginLeft: '-8px' }}
-                                    >
-                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                                            <line x1="9" y1="3" x2="9" y2="21"></line>
-                                        </svg>
-                                    </button>
-                                )}
-                                <ExportButton editor={editor} />
-                                <ImportButton editor={editor} onImportFromWebview={onImportFromWebview} />
-                                <div style={{ width: '1px', height: '16px', background: 'var(--border-color)', margin: '0 4px' }}></div>
-                                <button
-                                    className="icon-btn-primary"
-                                    onClick={async () => {
-                                        if (!activeNote || !editor) return;
-                                        const title = activeNote.title || 'Untitled';
-                                        const html = editor.getHTML();
-                                        try {
-                                            // @ts-expect-error Electron API
-                                            if (window.electronAPI && window.electronAPI.printToPDF) {
-                                                // @ts-expect-error Electron API
-                                                await window.electronAPI.printToPDF(title, html);
-                                            } else {
-                                                alert("PDF Export is only available in the Desktop app.");
-                                            }
-                                        } catch (e) {
-                                            console.error("PDF Export failed", e);
-                                            alert("Failed to export PDF.");
-                                        }
-                                    }}
-                                    title="Export as PDF"
-                                >
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                                        <polyline points="14 2 14 8 20 8"></polyline>
-                                        <line x1="16" y1="13" x2="8" y2="13"></line>
-                                        <line x1="16" y1="17" x2="8" y2="17"></line>
-                                        <polyline points="10 9 9 9 8 9"></polyline>
-                                    </svg>
-                                </button>
-
-                                <button
-                                    className={`icon-btn-primary ${isFullScreen ? 'active' : ''}`}
-                                    onClick={toggleFullScreen}
-                                    title={isFullScreen ? "Exit Focus Mode" : "Focus Mode (Hide Sidebar)"}
-                                >
-                                    {isFullScreen ?
-                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" /></svg>
-                                        :
-                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></svg>
-                                    }
-                                </button>
-
-                                <button
-                                    className={`icon-btn-primary ${zenMode ? 'active' : ''}`}
-                                    onClick={onToggleZenMode}
-                                    title={zenMode ? "Show Browser" : "Zen Mode (Hide Browser)"}
-                                >
-                                    {zenMode ?
-                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>
-                                        :
-                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
-                                    }
-                                </button>
-
-                                <div className="toolbar-divider" style={{ height: '16px', margin: '0' }} />
-
-                                <button
-                                    className="icon-btn-ghost"
-                                    onClick={() => deleteNote(activeNote?.id)}
-                                    title="Delete Note"
-                                >
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                                </button>
-                                <button className="action-link" onClick={downloadMarkdown}>Export</button>
-                            </div>
-                        </div>
-
-                        <div className="editor-canvas">
-                            <input
-                                className="clean-title-input"
-                                value={localTitle}
-                                onChange={(e) => {
-                                    setLocalTitle(e.target.value);
-                                    updateNote('title', e.target.value);
+                                ref={folderInputRef}
+                                autoFocus
+                                className="folder-input-inline"
+                                value={newFolderName}
+                                onChange={(e) => setNewFolderName(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') confirmCreateFolder();
+                                    if (e.key === 'Escape') setIsCreatingFolder(false);
                                 }}
-                                placeholder="Title"
+                                placeholder="Name..."
                             />
+                        </div>
+                    )}
 
-                            <div className="formatting-toolbar">
-                                <button onClick={() => toggleFormat('h1')} className={editor?.isActive('heading', { level: 1 }) ? 'active' : ''} title="Heading 1" style={{ fontSize: '13px', fontWeight: 600 }}>H1</button>
-                                <button onClick={() => toggleFormat('h2')} className={editor?.isActive('heading', { level: 2 }) ? 'active' : ''} title="Heading 2" style={{ fontSize: '13px', fontWeight: 600 }}>H2</button>
-                                <button onClick={() => toggleFormat('h3')} className={editor?.isActive('heading', { level: 3 }) ? 'active' : ''} title="Heading 3" style={{ fontSize: '13px', fontWeight: 600 }}>H3</button>
-                                <button onClick={() => toggleFormat('paragraph')} className={editor?.isActive('paragraph') ? 'active' : ''} title="Body Text" style={{ fontSize: '13px', fontWeight: 500 }}>Body</button>
-                                <div className="toolbar-divider" />
-                                <button onClick={() => toggleFormat('bold')} className={editor?.isActive('bold') ? 'active' : ''} title="Bold">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path></svg>
-                                </button>
-                                <button onClick={() => toggleFormat('italic')} className={editor?.isActive('italic') ? 'active' : ''} title="Italic">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="4" x2="10" y2="4"></line><line x1="14" y1="20" x2="5" y2="20"></line><line x1="15" y1="4" x2="9" y2="20"></line></svg>
-                                </button>
-                                <div className="toolbar-divider" />
-                                <button onClick={() => toggleFormat('bullet')} className={editor?.isActive('bulletList') ? 'active' : ''} title="Bullet List">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
-                                </button>
-                                <button onClick={() => toggleFormat('task')} className={editor?.isActive('taskList') ? 'active' : ''} title="Checklist (TickBox)">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
-                                </button>
-                                <div className="toolbar-divider" />
-                                <button
-                                    onClick={() => toggleFormat('code')}
-                                    className={editor?.isActive('codeBlock') ? 'active' : ''}
-                                    title="Code Block"
-                                >
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
-                                </button>
-                            </div>
+                    {searchTerm && <div className="section-label">Results</div>}
 
-                            <div className="editor-content-area">
-                                <EditorContent editor={editor} />
+                    <FolderList
+                        folders={filteredFolders}
+                        activeFolderId={activeFolderId}
+                        onSelectFolder={setActiveFolderId}
+                        onRenameFolder={async (id, name) => {
+                            await db.folders.update(id, { name });
+                        }}
+                        onDeleteFolder={deleteFolder}
+                        onMoveFolder={handleMoveFolder}
+                        onCreateSubfolder={async (parentId) => {
+                            const newId = Date.now().toString();
+                            await db.folders.add({
+                                id: newId,
+                                name: 'New Subfolder',
+                                parentId: parentId,
+                                order: 999,
+                                icon: 'Folder'
+                            });
+                            setActiveFolderId(newId);
+                        }}
+                        onRequestMove={(folderId) => setMoveTarget({ type: 'folder', id: folderId })}
+                        noteCounts={noteCounts}
+                        editingFolderId={editingFolderId}
+                        setEditingFolderId={setEditingFolderId}
+                    />
+                </div>
+
+                {zenMode ? (
+                    <button className="column-toggle-collapsed" onClick={onToggleZenMode}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 5l7 7-7 7" /><path d="M5 5l7 7-7 7" /></svg>
+                    </button>
+                ) : (
+                    <button className="column-toggle" onClick={onToggleZenMode}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 19l-7-7 7-7" /><path d="M19 19l-7-7 7-7" /></svg>
+                    </button>
+                )}
+
+                {showFolders && <div className="panel-resizer" onMouseDown={startResizing('folder')} />}
+            </div>
+
+            {/* 2. Notes List */}
+            <div
+                className={`notes-list-col ${!showList ? 'collapsed' : ''} ${!showEditor ? 'expanded' : ''}`}
+                style={{ width: showList && showEditor ? listWidth : undefined }}
+            >
+                {showList && (
+                    <>
+                        <header className="notes-header-minimal">
+                            <span className="folder-title-display">{folders.find(f => f.id === activeFolderId)?.name || 'All Notes'}</span>
+                            <button className="icon-btn-primary" onClick={createNote} title="New Note">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                </svg>
+                            </button>
+                        </header>
+                        <div style={{ padding: '0 8px 12px' }}>
+                            <div className="search-wrapper">
+                                <span className="search-icon">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                </span>
+                                <input
+                                    className="notes-search-bar"
+                                    placeholder="Search"
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                />
                             </div>
                         </div>
                     </>
-                ) : (
-                    <div className="empty-stage">
-                        <div className="empty-icon">
-                            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                                <polyline points="14 2 14 8 20 8" />
-                                <line x1="16" y1="13" x2="8" y2="13" />
-                                <line x1="16" y1="17" x2="8" y2="17" />
-                                <polyline points="10 9 9 9 8 9" />
-                            </svg>
-                        </div>
-                        <p>Select a note to start writing</p>
+                )}
+                {showList && (
+                    <div className="notes-scroller">
+                        {(() => {
+                            const now = new Date();
+                            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                            const yesterday = new Date(today);
+                            yesterday.setDate(yesterday.getDate() - 1);
+                            const last7Days = new Date(today);
+                            last7Days.setDate(last7Days.getDate() - 7);
+                            const last30Days = new Date(today);
+                            last30Days.setDate(last30Days.getDate() - 30);
+
+                            const groups: { [key: string]: typeof displayNotes } = {};
+                            const groupOrder: string[] = [];
+
+                            displayNotes.forEach(note => {
+                                const noteDate = new Date(note.updatedAt);
+                                const dateOnly = new Date(noteDate.getFullYear(), noteDate.getMonth(), noteDate.getDate());
+
+                                let groupName = '';
+                                if (dateOnly.getTime() === today.getTime()) {
+                                    groupName = 'Today';
+                                } else if (dateOnly.getTime() === yesterday.getTime()) {
+                                    groupName = 'Yesterday';
+                                } else if (dateOnly > last7Days) {
+                                    groupName = 'Previous 7 Days';
+                                } else if (dateOnly > last30Days) {
+                                    groupName = 'Previous 30 Days';
+                                } else {
+                                    groupName = noteDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                                }
+
+                                if (!groups[groupName]) {
+                                    groups[groupName] = [];
+                                    groupOrder.push(groupName);
+                                }
+                                groups[groupName].push(note);
+                            });
+
+                            if (displayNotes.length === 0) {
+                                return (
+                                    <div className="empty-state" style={{ padding: '40px 20px', textAlign: 'center', opacity: 0.5 }}>
+                                        No notes found
+                                    </div>
+                                );
+                            }
+
+                            return groupOrder.map(group => (
+                                <div key={group} className="notes-group">
+                                    <h5 className="notes-group-header">{group}</h5>
+                                    {groups[group].map(note => (
+                                        <NotePreviewCard
+                                            key={note.id}
+                                            note={note}
+                                            isActive={activeNoteId === note.id}
+                                            onSelect={handleNoteClick}
+                                            onContextMenu={handleNoteContextMenu}
+                                        />
+                                    ))}
+                                </div>
+                            ));
+                        })()}
                     </div>
                 )}
-            </div>
-        )}
+                {noteMenu && (
+                    <>
+                        <div className="context-menu-backdrop" onClick={() => setNoteMenu(null)} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />
+                        <div className="context-menu" style={{ top: noteMenu.y, left: noteMenu.x, zIndex: 100 }}>
+                            <button onClick={() => { setMoveTarget({ type: 'note', id: noteMenu.noteId }); setNoteMenu(null); }} className="menu-item">Move to...</button>
+                            <div className="menu-divider" />
+                            <button onClick={() => deleteNote(noteMenu.noteId)} className="menu-item delete">Delete Note</button>
+                        </div>
+                    </>
+                )}
 
-        {!showEditor && (
-            <div className="editor-collapsed-handle">
-                <button className="column-toggle-collapsed" onClick={() => setShowEditor(true)}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 19l-7-7 7-7m8 14l-7-7 7-7" /></svg>
-                </button>
+                {showList && showEditor && <div className="panel-resizer" onMouseDown={startResizing('list')} />}
             </div>
-        )}
 
-        {moveTarget && (
-            <div className="modal-backdrop" onClick={() => setMoveTarget(null)}>
-                <div className="modal-content" onClick={e => e.stopPropagation()}>
-                    <div className="modal-header">
-                        <h3>Move {moveTarget.type === 'note' ? 'Note' : 'Folder'}</h3>
-                    </div>
-                    <div className="folder-select-list">
-                        <button
-                            className={`folder-select-item ${activeFolderId === 'ninai' ? 'active' : ''}`}
-                            onClick={() => handleMoveItem('ninai')}
-                        >
-                            <span className="folder-icon">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-                            </span> Home (NINAI)
-                        </button>
-                        {folderOptions.map(f => (
+            {/* 3. Editor Stage */}
+            {showEditor && (
+                <div
+                    className={`editor-stage ${isCreatingFolder ? 'blur-sm' : ''}`}
+                    onDragOver={(e) => {
+                        e.preventDefault();
+                        e.currentTarget.classList.add('drag-over-active');
+                    }}
+                    onDragLeave={(e) => {
+                        e.preventDefault();
+                        e.currentTarget.classList.remove('drag-over-active');
+                    }}
+                    onDrop={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.currentTarget.classList.remove('drag-over-active');
+                        if (!editor) return;
+                        const html = e.dataTransfer.getData('text/html');
+                        const text = e.dataTransfer.getData('text/plain');
+                        if (html || text) {
+                            processSmartPaste(editor, { text, html });
+                        }
+                    }}
+                >
+                    {activeNote ? (
+                        <>
+                            <div className="editor-toolbar-clean">
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                    {(!showFolders || !showList) && (
+                                        <button
+                                            className="icon-btn-ghost"
+                                            onClick={() => { setShowFolders(true); setShowList(true); }}
+                                            title="Show Sidebars"
+                                            style={{ marginLeft: '-8px' }}
+                                        >
+                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                                <line x1="9" y1="3" x2="9" y2="21"></line>
+                                            </svg>
+                                        </button>
+                                    )}
+                                    <ExportButton editor={editor} />
+                                    <ImportButton editor={editor} onImportFromWebview={onImportFromWebview} />
+                                    <div style={{ width: '1px', height: '16px', background: 'var(--border-color)', margin: '0 4px' }}></div>
+                                    <button
+                                        className="icon-btn-primary"
+                                        onClick={async () => {
+                                            if (!activeNote || !editor) return;
+                                            const title = activeNote.title || 'Untitled';
+                                            const html = editor.getHTML();
+                                            try {
+                                                // @ts-expect-error Electron API
+                                                if (window.electronAPI && window.electronAPI.printToPDF) {
+                                                    // @ts-expect-error Electron API
+                                                    await window.electronAPI.printToPDF(title, html);
+                                                } else {
+                                                    alert("PDF Export is only available in the Desktop app.");
+                                                }
+                                            } catch (e) {
+                                                console.error("PDF Export failed", e);
+                                                alert("Failed to export PDF.");
+                                            }
+                                        }}
+                                        title="Export as PDF"
+                                    >
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                            <polyline points="14 2 14 8 20 8"></polyline>
+                                            <line x1="16" y1="13" x2="8" y2="13"></line>
+                                            <line x1="16" y1="17" x2="8" y2="17"></line>
+                                            <polyline points="10 9 9 9 8 9"></polyline>
+                                        </svg>
+                                    </button>
+
+                                    <button
+                                        className={`icon-btn-primary ${isFullScreen ? 'active' : ''}`}
+                                        onClick={toggleFullScreen}
+                                        title={isFullScreen ? "Exit Focus Mode" : "Focus Mode (Hide Sidebar)"}
+                                    >
+                                        {isFullScreen ?
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" /></svg>
+                                            :
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></svg>
+                                        }
+                                    </button>
+
+                                    <button
+                                        className={`icon-btn-primary ${zenMode ? 'active' : ''}`}
+                                        onClick={onToggleZenMode}
+                                        title={zenMode ? "Show Browser" : "Zen Mode (Hide Browser)"}
+                                    >
+                                        {zenMode ?
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>
+                                            :
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
+                                        }
+                                    </button>
+
+                                    <div className="toolbar-divider" style={{ height: '16px', margin: '0' }} />
+
+                                    <button
+                                        className="icon-btn-ghost"
+                                        onClick={() => deleteNote(activeNote?.id)}
+                                        title="Delete Note"
+                                    >
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                    </button>
+                                    <button className="action-link" onClick={downloadMarkdown}>Export</button>
+                                </div>
+                            </div>
+
+                            <div className="editor-canvas">
+                                <input
+                                    className="clean-title-input"
+                                    value={localTitle}
+                                    onChange={(e) => {
+                                        setLocalTitle(e.target.value);
+                                        updateNote('title', e.target.value);
+                                    }}
+                                    placeholder="Title"
+                                />
+
+                                <div className="formatting-toolbar">
+                                    <button onClick={() => toggleFormat('h1')} className={editor?.isActive('heading', { level: 1 }) ? 'active' : ''} title="Heading 1" style={{ fontSize: '13px', fontWeight: 600 }}>H1</button>
+                                    <button onClick={() => toggleFormat('h2')} className={editor?.isActive('heading', { level: 2 }) ? 'active' : ''} title="Heading 2" style={{ fontSize: '13px', fontWeight: 600 }}>H2</button>
+                                    <button onClick={() => toggleFormat('h3')} className={editor?.isActive('heading', { level: 3 }) ? 'active' : ''} title="Heading 3" style={{ fontSize: '13px', fontWeight: 600 }}>H3</button>
+                                    <button onClick={() => toggleFormat('paragraph')} className={editor?.isActive('paragraph') ? 'active' : ''} title="Body Text" style={{ fontSize: '13px', fontWeight: 500 }}>Body</button>
+                                    <div className="toolbar-divider" />
+                                    <button onClick={() => toggleFormat('bold')} className={editor?.isActive('bold') ? 'active' : ''} title="Bold">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path></svg>
+                                    </button>
+                                    <button onClick={() => toggleFormat('italic')} className={editor?.isActive('italic') ? 'active' : ''} title="Italic">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="4" x2="10" y2="4"></line><line x1="14" y1="20" x2="5" y2="20"></line><line x1="15" y1="4" x2="9" y2="20"></line></svg>
+                                    </button>
+                                    <div className="toolbar-divider" />
+                                    <button onClick={() => toggleFormat('bullet')} className={editor?.isActive('bulletList') ? 'active' : ''} title="Bullet List">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                                    </button>
+                                    <button onClick={() => toggleFormat('task')} className={editor?.isActive('taskList') ? 'active' : ''} title="Checklist (TickBox)">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+                                    </button>
+                                    <div className="toolbar-divider" />
+                                    <button
+                                        onClick={() => toggleFormat('code')}
+                                        className={editor?.isActive('codeBlock') ? 'active' : ''}
+                                        title="Code Block"
+                                    >
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+                                    </button>
+                                </div>
+
+                                <div className="editor-content-area">
+                                    <EditorContent editor={editor} />
+                                </div>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="empty-stage">
+                            <div className="empty-icon">
+                                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                    <polyline points="14 2 14 8 20 8" />
+                                    <line x1="16" y1="13" x2="8" y2="13" />
+                                    <line x1="16" y1="17" x2="8" y2="17" />
+                                    <polyline points="10 9 9 9 8 9" />
+                                </svg>
+                            </div>
+                            <p>Select a note to start writing</p>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {!showEditor && (
+                <div className="editor-collapsed-handle">
+                    <button className="column-toggle-collapsed" onClick={() => setShowEditor(true)}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 19l-7-7 7-7m8 14l-7-7 7-7" /></svg>
+                    </button>
+                </div>
+            )}
+
+            {moveTarget && (
+                <div className="modal-backdrop" onClick={() => setMoveTarget(null)}>
+                    <div className="modal-content" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h3>Move {moveTarget.type === 'note' ? 'Note' : 'Folder'}</h3>
+                        </div>
+                        <div className="folder-select-list">
                             <button
-                                key={f.id}
-                                className="folder-select-item"
-                                style={{ paddingLeft: `${f.depth * 20 + 12}px` }}
-                                onClick={() => handleMoveItem(f.id)}
-                                disabled={moveTarget.type === 'folder' && moveTarget.id === f.id}
+                                className={`folder-select-item ${activeFolderId === 'ninai' ? 'active' : ''}`}
+                                onClick={() => handleMoveItem('ninai')}
                             >
-                                {f.depth > 0 ? '' : ''}<span className="folder-icon">
+                                <span className="folder-icon">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-                                </span> {f.name}
+                                </span> Home (NINAI)
                             </button>
-                        ))}
-                        <div className="modal-actions">
-                            <button className="close-btn" onClick={() => setMoveTarget(null)}>Cancel</button>
+                            {folderOptions.map(f => (
+                                <button
+                                    key={f.id}
+                                    className="folder-select-item"
+                                    style={{ paddingLeft: `${f.depth * 20 + 12}px` }}
+                                    onClick={() => handleMoveItem(f.id)}
+                                    disabled={moveTarget.type === 'folder' && moveTarget.id === f.id}
+                                >
+                                    {f.depth > 0 ? '' : ''}<span className="folder-icon">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                                    </span> {f.name}
+                                </button>
+                            ))}
+                            <div className="modal-actions">
+                                <button className="close-btn" onClick={() => setMoveTarget(null)}>Cancel</button>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
-        )}
-    </div>
-);
+            )}
+        </div>
+    );
 };
 
 // Helper for Smart Paste Logic (Reuse for Clipboard + Drop)
