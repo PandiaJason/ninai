@@ -431,9 +431,10 @@
 
 .editor-canvas {
     flex: 1;
-    max-width: 900px;
-    /* Increased from 700px */
-    margin: 0 auto;
+    max-width: 100%;
+    /* Fully maximize width as requested */
+    margin: 0;
+    /* Remove centering margin */
     width: 100%;
     padding: 0 32px;
     display: flex;
