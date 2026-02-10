@@ -107,6 +107,8 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
 
     const [activeFolderId, setActiveFolderId] = useState<string>('ninai');
     const [activeNoteId, setActiveNoteId] = useState<string | null>(() => localStorage.getItem('ninai_active_note'));
+    const titleInputRef = useRef<HTMLInputElement>(null); // Ref for title input
+    const [shouldFocusTitle, setShouldFocusTitle] = useState(false); // Flag for new note creation
 
     useEffect(() => {
         if (activeNoteId) localStorage.setItem('ninai_active_note', activeNoteId);
@@ -500,8 +502,16 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
             setLocalTitle(activeNote.title);
             editor.commands.setContent(activeNote.content, { emitUpdate: false });
             previousNoteIdRef.current = activeNote.id;
+
+            // Handle Auto-Focus Title Logic
+            if (shouldFocusTitle) {
+                setTimeout(() => {
+                    titleInputRef.current?.focus();
+                    setShouldFocusTitle(false);
+                }, 50);
+            }
         }
-    }, [activeNote, editor]);
+    }, [activeNote, editor, shouldFocusTitle]);
 
 
     // Formatting Helpers
@@ -514,7 +524,7 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
             case 'h1': editor.chain().focus().toggleHeading({ level: 1 }).run(); break;
             case 'h2': editor.chain().focus().toggleHeading({ level: 2 }).run(); break;
             case 'h3': editor.chain().focus().toggleHeading({ level: 3 }).run(); break;
-            case 'paragraph': editor.chain().focus().setParagraph().run(); break; // New Body action
+            case 'paragraph': editor.chain().focus().setParagraph().run(); break;
             case 'bullet': editor.chain().focus().toggleBulletList().run(); break;
             case 'task': editor.chain().focus().toggleTaskList().run(); break;
             case 'code': editor.chain().focus().toggleCodeBlock().run(); break;
@@ -529,11 +539,12 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
             id: newId,
             folderId: targetFolder,
             title: '',
-            content: '', // Empty HTML
+            content: '',
             updatedAt: new Date()
         };
         await db.notes.add(newNote);
         setActiveNoteId(newId);
+        setShouldFocusTitle(true);
     };
 
     const folderInputRef = useRef<HTMLInputElement>(null);
@@ -983,11 +994,18 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
 
                             <div className="editor-canvas">
                                 <input
+                                    ref={titleInputRef}
                                     className="clean-title-input"
                                     value={localTitle}
                                     onChange={(e) => {
                                         setLocalTitle(e.target.value);
                                         updateNote('title', e.target.value);
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Tab') {
+                                            e.preventDefault();
+                                            editor?.commands.focus();
+                                        }
                                     }}
                                     placeholder="Title"
                                 />
