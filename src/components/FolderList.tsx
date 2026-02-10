@@ -48,7 +48,7 @@ interface SortableFolderProps {
     onToggleCollapse: () => void;
 }
 
-const SortableFolderItem = ({
+const SortableFolderItem = React.memo(({
     folder,
     isActive,
     noteCount,
@@ -134,9 +134,9 @@ const SortableFolderItem = ({
             <span className="folder-count">{noteCount > 0 ? noteCount : ''}</span>
         </div>
     );
-};
+});
 
-export const FolderList: React.FC<FolderListProps> = ({
+export const FolderList: React.FC<FolderListProps> = React.memo(({
     folders,
     activeFolderId,
     onSelectFolder,
@@ -190,10 +190,10 @@ export const FolderList: React.FC<FolderListProps> = ({
     const [contextMenu, setContextMenu] = useState<{ x: number, y: number, folderId: string } | null>(null);
     const [editName, setEditName] = useState('');
 
-    const handleContextMenu = (e: React.MouseEvent, folderId: string) => {
+    const handleContextMenu = React.useCallback((e: React.MouseEvent, folderId: string) => {
         e.preventDefault();
         setContextMenu({ x: e.clientX, y: e.clientY, folderId });
-    };
+    }, []);
 
     const startRenaming = () => {
         if (contextMenu) {
@@ -294,4 +294,4 @@ export const FolderList: React.FC<FolderListProps> = ({
             )}
         </div>
     );
-};
+});

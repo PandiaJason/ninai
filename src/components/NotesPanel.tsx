@@ -122,28 +122,41 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
     const [isCreatingFolder, setIsCreatingFolder] = useState(false);
     const [newFolderName, setNewFolderName] = useState('');
 
-    // --- Resizing Logic ---
+    // --- Resizing Logic (RAF-optimized to avoid layout thrashing) ---
     const [folderWidth, setFolderWidth] = useState(200);
     const [listWidth, setListWidth] = useState(240);
     const isResizing = useRef<null | 'folder' | 'list'>(null);
+    const resizeRaf = useRef<number | null>(null);
 
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
             if (!isResizing.current) return;
-            if (isResizing.current === 'folder') {
-                const newW = e.clientX;
-                if (newW > 100 && newW < 600) setFolderWidth(newW);
-            } else if (isResizing.current === 'list') {
-                const sidebarEl = document.querySelector('.folders-sidebar') as HTMLElement;
-                const sidebarW = sidebarEl ? sidebarEl.getBoundingClientRect().width : 0;
-                const newW = e.clientX - sidebarW;
-                if (newW > 150 && newW < 800) setListWidth(newW);
-            }
+            if (resizeRaf.current) cancelAnimationFrame(resizeRaf.current);
+            resizeRaf.current = requestAnimationFrame(() => {
+                if (isResizing.current === 'folder') {
+                    const newW = e.clientX;
+                    if (newW > 100 && newW < 600) setFolderWidth(newW);
+                } else if (isResizing.current === 'list') {
+                    const sidebarEl = document.querySelector('.folders-sidebar') as HTMLElement;
+                    const sidebarW = sidebarEl ? sidebarEl.getBoundingClientRect().width : 0;
+                    const newW = e.clientX - sidebarW;
+                    if (newW > 150 && newW < 800) setListWidth(newW);
+                }
+            });
         };
-        const handleMouseUp = () => { isResizing.current = null; document.body.style.cursor = ''; document.body.style.userSelect = ''; };
+        const handleMouseUp = () => {
+            isResizing.current = null;
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            if (resizeRaf.current) { cancelAnimationFrame(resizeRaf.current); resizeRaf.current = null; }
+        };
         window.addEventListener('mousemove', handleMouseMove);
         window.addEventListener('mouseup', handleMouseUp);
-        return () => { window.removeEventListener('mousemove', handleMouseMove); window.removeEventListener('mouseup', handleMouseUp); };
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+            if (resizeRaf.current) cancelAnimationFrame(resizeRaf.current);
+        };
     }, []);
 
     // --- Auto-Collapse Logic (Responsive) ---
@@ -253,8 +266,8 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
         debouncedUpdateNote(activeNoteId, { [field]: value });
     };
 
-    // Extension for highlighting the active block
-    const ActiveBlockHighlight = Extension.create({
+    // Extension for highlighting the active block (memoized to prevent re-creation)
+    const ActiveBlockHighlight = React.useMemo(() => Extension.create({
         name: 'activeBlockHighlight',
         addProseMirrorPlugins() {
             return [
@@ -264,42 +277,24 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                         decorations(state) {
                             const { selection } = state;
                             const { $from } = selection;
-                            // Decorations to return
                             const decorations: Decoration[] = [];
-
-                            // Find the block/node at the cursor
-                            // We want to highlight the direct child of doc or the closest block container?
-                            // Usually depth 1 is doc, depth 2 is paragraph.
-                            // But let's just highlight the parent node of the selection.
-                            // However, we want the block-level element like P, H1, H2, LI...
-
-                            // Walk up from current depth to find a block node
-                            let currentDepth = $from.depth;
-                            let node = $from.node(currentDepth);
-
-                            // If it's text node (which tiptap handles abstractly, but in PM selection is in text usually inside a block)
-                            // $from.parent is the block containing the text.
-                            // So usually just $from.depth is enough.
-
-                            // Safety check
-                            if ($from.depth > 0) {
-                                // Calculate the start pos of the node
+                            const currentDepth = $from.depth;
+                            if (currentDepth > 0) {
+                                const node = $from.node(currentDepth);
                                 const startPos = $from.before(currentDepth);
-                                // Decoration.node applies class to the node wrapper
                                 decorations.push(
                                     Decoration.node(startPos, startPos + node.nodeSize, {
                                         class: 'active-block',
                                     })
                                 );
                             }
-
                             return DecorationSet.create(state.doc, decorations);
                         },
                     },
                 }),
             ];
         },
-    });
+    }), []);
 
     const editor = useEditor({
         extensions: [
@@ -392,7 +387,8 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                             canvas.height = height;
                             ctx?.drawImage(img, 0, 0, width, height);
 
-                            const dataUrl = canvas.toDataURL('image/png');
+                            // Performance: Use JPEG with 80% quality for ~60% smaller base64
+                            const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
                             resolve(dataUrl);
                         } catch (err) {
                             reject(err);
@@ -681,12 +677,16 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
     }, [folders]);
 
 
+    // Performance: O(n) single-pass counting instead of O(n*m) filtered counts
     const noteCounts = React.useMemo(() => {
         const counts: { [key: string]: number } = {};
         counts['all'] = notes.length;
-        folders.forEach(f => {
-            if (f.id === 'all') return;
-            counts[f.id] = notes.filter(n => n.folderId === f.id).length;
+        // Initialize all folder counts to 0
+        folders.forEach(f => { if (f.id !== 'all') counts[f.id] = 0; });
+        // Single pass through notes
+        notes.forEach(n => {
+            if (counts[n.folderId] !== undefined) counts[n.folderId]++;
+            else counts[n.folderId] = 1;
         });
         return counts;
     }, [notes, folders]);

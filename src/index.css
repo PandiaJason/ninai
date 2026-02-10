@@ -1,5 +1,12 @@
 /* NINAI Design System - Light Theme */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+/* Performance: Use font-display: swap to avoid FOIT (Flash of Invisible Text) */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfAZ9hiJ-Ek-_EeA.woff2') format('woff2');
+}
 
 :root {
   /* Enforce Light Mode */
@@ -75,12 +82,17 @@ body {
   -webkit-font-smoothing: antialiased;
   height: 100vh;
   overflow: hidden;
+  /* Performance: Enable GPU compositing for the entire app */
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
 }
 
 #root {
   height: 100%;
   width: 100%;
   isolation: isolate;
+  /* Performance: Promote to own compositing layer */
+  contain: layout style;
 }
 
 /* Utilities */
@@ -89,7 +101,8 @@ body {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-left: 1px solid rgba(0, 0, 0, 0.05);
-  /* Adjusted for light mode visibility */
+  /* Performance: GPU layer for blur */
+  will-change: transform;
 }
 
 /* Scrollbar Tweaks for Light Mode */
@@ -108,4 +121,12 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-tertiary);
+}
+
+/* Performance: Reduce paint for transitions */
+.folders-sidebar,
+.notes-list-pane,
+.editor-stage {
+  will-change: width;
+  contain: layout style;
 }
