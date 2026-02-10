@@ -613,14 +613,18 @@ ul[data-type="taskList"] {
 }
 
 /* Robust Task Item Layout */
-li[data-type="taskItem"] {
+.ProseMirror li[data-type="taskItem"],
+li[data-type="taskItem"],
+.ProseMirror li[data-checked],
+li[data-checked] {
     display: flex !important;
     flex-direction: row !important;
     align-items: flex-start !important;
     margin-bottom: 0.5em;
 }
 
-li[data-type="taskItem"] label {
+li[data-type="taskItem"] label,
+li[data-checked] label {
     flex-shrink: 0;
     margin-right: 0.5em;
     /* Explicit spacing */
@@ -629,14 +633,16 @@ li[data-type="taskItem"] label {
     /* Slight optical adjustment */
 }
 
-li[data-type="taskItem"] input[type="checkbox"] {
+li[data-type="taskItem"] input[type="checkbox"],
+li[data-checked] input[type="checkbox"] {
     transform: scale(1.1);
     cursor: pointer;
     margin: 0;
     /* Reset margins */
 }
 
-li[data-type="taskItem"]>div {
+li[data-type="taskItem"]>div,
+li[data-checked]>div {
     flex: 1;
     min-width: 0;
     /* proper flex text wrapping */
@@ -1066,12 +1072,11 @@ li[data-type="taskItem"] p {
 }
 
 /* Active Block Highlight */
+/* Active Block Highlight */
 .active-block {
     background-color: rgba(59, 130, 246, 0.08);
     /* Blue tint */
     border-radius: 4px;
-    box-shadow: -3px 0 0 var(--accent-primary);
-    /* Left indicator */
     transition: background-color 0.1s;
 }
 
