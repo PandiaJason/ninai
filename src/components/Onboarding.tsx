@@ -91,7 +91,7 @@ export const Onboarding: React.FC<OnboardingProps> = () => {
                     <p style={{
                         fontSize: '1rem', color: '#666', lineHeight: 1.5, margin: 0, fontWeight: 500
                     }}>
-                        New<b>N</b>etworking <b>I</b>nterface N <b>AI</b>
+                        Networking Interface N AI
                     </p>
                 </div>
 
