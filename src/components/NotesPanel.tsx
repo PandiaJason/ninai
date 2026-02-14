@@ -18,7 +18,7 @@ import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 
 import { db } from '../db';
-import type { Note } from '../db';
+import type { Note, NoteReminder } from '../db';
 import './NotesPanel.css';
 import { FolderList } from './FolderList';
 import { exportToMarkdown, insertMarkdown } from '../services/llm';
@@ -128,6 +128,7 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
     const [reminderDate, setReminderDate] = useState('');
     const [reminderTime, setReminderTime] = useState('09:00');
     const [reminderPriority, setReminderPriority] = useState<'high' | 'medium' | 'low'>('medium');
+    const [reminderText, setReminderText] = useState('');
 
     // --- Resizing Logic (RAF-optimized to avoid layout thrashing) ---
     const [folderWidth, setFolderWidth] = useState(200);
@@ -742,7 +743,7 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                     <FolderList
                         folders={filteredFolders}
                         activeFolderId={activeFolderId}
-                        onSelectFolder={setActiveFolderId}
+                        onSelectFolder={(folderId) => { setActiveFolderId(folderId); setActiveNoteId(null); }}
                         onRenameFolder={async (id, name) => {
                             await db.folders.update(id, { name });
                         }}
@@ -1049,22 +1050,30 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                                         <button
                                             onClick={() => {
                                                 if (!activeNote) return;
-                                                if (activeNote.dueAt) {
-                                                    db.notes.update(activeNote.id, { dueAt: undefined, priority: undefined });
-                                                    setShowReminderForm(false);
-                                                    return;
+                                                // Get selected text from editor, or current line
+                                                let selText = '';
+                                                if (editor) {
+                                                    const { from, to } = editor.state.selection;
+                                                    if (from !== to) {
+                                                        selText = editor.state.doc.textBetween(from, to, ' ');
+                                                    } else {
+                                                        // Get current line text
+                                                        const $pos = editor.state.doc.resolve(from);
+                                                        const node = $pos.parent;
+                                                        selText = node.textContent || '';
+                                                    }
                                                 }
-                                                // Pre-fill with tomorrow's date
                                                 const tomorrow = new Date();
                                                 tomorrow.setDate(tomorrow.getDate() + 1);
                                                 setReminderDate(tomorrow.toISOString().split('T')[0]);
                                                 setReminderTime('09:00');
                                                 setReminderPriority('medium');
+                                                setReminderText(selText.trim());
                                                 setShowReminderForm(!showReminderForm);
                                             }}
-                                            className={activeNote?.dueAt ? 'active' : ''}
-                                            title={activeNote?.dueAt ? 'Clear Reminder' : 'Set Reminder'}
-                                            style={{ color: activeNote?.dueAt ? '#f59e0b' : undefined }}
+                                            className={(activeNote?.reminders && activeNote.reminders.length > 0) ? 'active' : ''}
+                                            title={(activeNote?.reminders && activeNote.reminders.length > 0) ? `${activeNote.reminders.length} Reminder(s)` : 'Set Reminder'}
+                                            style={{ color: (activeNote?.reminders && activeNote.reminders.length > 0) ? '#f59e0b' : undefined }}
                                         >
                                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
@@ -1075,6 +1084,43 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
 
                                     {showReminderForm && (
                                         <div className="reminder-popover">
+                                            {/* Existing reminders */}
+                                            {activeNote?.reminders && activeNote.reminders.length > 0 && (
+                                                <div className="reminder-existing-list">
+                                                    <div className="reminder-existing-label">Active Reminders</div>
+                                                    {activeNote.reminders.map(r => (
+                                                        <div key={r.id} className="reminder-existing-item">
+                                                            <span
+                                                                className="home-priority-dot"
+                                                                style={{ background: r.priority === 'high' ? '#ef4444' : r.priority === 'medium' ? '#f59e0b' : '#3b82f6' }}
+                                                            />
+                                                            <span className="reminder-existing-text">{r.text || 'Untitled'}</span>
+                                                            <span className="reminder-existing-due">
+                                                                {new Date(r.dueAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                                            </span>
+                                                            <button
+                                                                className="reminder-existing-delete"
+                                                                onClick={() => {
+                                                                    if (!activeNote) return;
+                                                                    const updated = (activeNote.reminders || []).filter(rem => rem.id !== r.id);
+                                                                    db.notes.update(activeNote.id, { reminders: updated });
+                                                                }}
+                                                                title="Remove this reminder"
+                                                            >×</button>
+                                                        </div>
+                                                    ))}
+                                                    <div className="toolbar-divider" style={{ margin: '8px 0' }} />
+                                                </div>
+                                            )}
+
+                                            {/* Add new reminder */}
+                                            <div className="reminder-new-label">Add Reminder</div>
+                                            {reminderText && (
+                                                <div className="reminder-popover-text">
+                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+                                                    <span>{reminderText.length > 50 ? reminderText.slice(0, 50) + '…' : reminderText}</span>
+                                                </div>
+                                            )}
                                             <div className="reminder-popover-row">
                                                 <label>Date</label>
                                                 <input
@@ -1125,13 +1171,19 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                                                     disabled={!reminderDate}
                                                     onClick={() => {
                                                         if (!activeNote || !reminderDate) return;
-                                                        db.notes.update(activeNote.id, {
+                                                        const newReminder: NoteReminder = {
+                                                            id: crypto.randomUUID(),
+                                                            text: reminderText || activeNote.title || 'Untitled',
                                                             dueAt: new Date(`${reminderDate}T${reminderTime}`),
                                                             priority: reminderPriority
+                                                        };
+                                                        const existing = activeNote.reminders || [];
+                                                        db.notes.update(activeNote.id, {
+                                                            reminders: [...existing, newReminder]
                                                         });
                                                         setShowReminderForm(false);
                                                     }}
-                                                >Set Reminder</button>
+                                                >Add Reminder</button>
                                             </div>
                                         </div>
                                     )}

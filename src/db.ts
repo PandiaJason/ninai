@@ -1,13 +1,19 @@
 import Dexie, { type Table } from 'dexie';
 
+export interface NoteReminder {
+    id: string;                          // UUID for each reminder
+    text: string;                        // The selected text / line content
+    dueAt: Date;                         // When it's due
+    priority: 'low' | 'medium' | 'high'; // Priority level
+}
+
 export interface Note {
     id: string; // Keep string UUIDs for compatibility
     folderId: string;
     title: string;
     content: string;
     updatedAt: Date;
-    dueAt?: Date;      // Optional reminder due date
-    priority?: 'low' | 'medium' | 'high';  // Task priority
+    reminders?: NoteReminder[];  // Array of reminders (multiple per note)
 }
 
 
@@ -25,6 +31,26 @@ export class NinaiDB extends Dexie {
 
     constructor() {
         super('NinaiDB');
+
+        // Version 5: Multi-reminder array per note
+        this.version(5).stores({
+            notes: 'id, folderId, title, updatedAt',
+            folders: 'id, name, parentId, order',
+        }).upgrade(tx => {
+            return tx.table('notes').toCollection().modify(note => {
+                // Migrate old single dueAt/priority into reminders[]
+                if ((note as any).dueAt) {
+                    note.reminders = [{
+                        id: crypto.randomUUID(),
+                        text: note.title || 'Untitled',
+                        dueAt: (note as any).dueAt,
+                        priority: (note as any).priority || 'medium'
+                    }];
+                }
+                delete (note as any).dueAt;
+                delete (note as any).priority;
+            });
+        });
 
         // Version 4: Add dueAt to notes, remove reminders table
         this.version(4).stores({
