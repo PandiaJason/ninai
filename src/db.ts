@@ -1,10 +1,13 @@
 import Dexie, { type Table } from 'dexie';
 
+export type RepeatOption = 'daily' | 'weekdays' | 'weekly' | 'monthly' | 'yearly';
+
 export interface NoteReminder {
     id: string;                          // UUID for each reminder
     text: string;                        // The selected text / line content
     dueAt: Date;                         // When it's due
     priority: 'low' | 'medium' | 'high'; // Priority level
+    repeat?: RepeatOption;               // Recurrence (undefined = one-time)
 }
 
 export interface Note {
@@ -13,7 +16,9 @@ export interface Note {
     title: string;
     content: string;
     updatedAt: Date;
+    loved?: number;                 // Favorited / pinned note (1=true, 0=false)
     reminders?: NoteReminder[];  // Array of reminders (multiple per note)
+    hasReminders?: number;       // 1 if has reminders, 0 otherwise (for indexing)
 }
 
 
@@ -32,6 +37,34 @@ export class NinaiDB extends Dexie {
     constructor() {
         super('NinaiDB');
 
+        // Version 7: Fix boolean index crash
+        this.version(7).stores({
+            notes: 'id, folderId, title, updatedAt, loved, hasReminders',
+            folders: 'id, name, parentId, order',
+        }).upgrade(tx => {
+            return tx.table('notes').toCollection().modify(note => {
+                // Migrate boolean loved to number
+                if (typeof note.loved === 'boolean') {
+                    note.loved = note.loved ? 1 : 0;
+                }
+            });
+        });
+
+        // Version 6: Optimization indexes
+        this.version(6).stores({
+            notes: 'id, folderId, title, updatedAt, loved, hasReminders',
+            folders: 'id, name, parentId, order',
+        }).upgrade(tx => {
+            return tx.table('notes').toCollection().modify(note => {
+                // Backfill hasReminders
+                if (note.reminders && note.reminders.length > 0) {
+                    note.hasReminders = 1;
+                } else {
+                    note.hasReminders = 0;
+                }
+            });
+        });
+
         // Version 5: Multi-reminder array per note
         this.version(5).stores({
             notes: 'id, folderId, title, updatedAt',
@@ -46,6 +79,7 @@ export class NinaiDB extends Dexie {
                         dueAt: (note as any).dueAt,
                         priority: (note as any).priority || 'medium'
                     }];
+                    note.hasReminders = 1; // Also set for new schema
                 }
                 delete (note as any).dueAt;
                 delete (note as any).priority;

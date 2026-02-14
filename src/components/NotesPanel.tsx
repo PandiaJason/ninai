@@ -18,7 +18,7 @@ import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 
 import { db } from '../db';
-import type { Note, NoteReminder } from '../db';
+import type { Note, NoteReminder, RepeatOption } from '../db';
 import './NotesPanel.css';
 import { FolderList } from './FolderList';
 import { exportToMarkdown, insertMarkdown } from '../services/llm';
@@ -129,6 +129,7 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
     const [reminderTime, setReminderTime] = useState('09:00');
     const [reminderPriority, setReminderPriority] = useState<'high' | 'medium' | 'low'>('medium');
     const [reminderText, setReminderText] = useState('');
+    const [reminderRepeat, setReminderRepeat] = useState<RepeatOption | undefined>(undefined);
 
     // --- Resizing Logic (RAF-optimized to avoid layout thrashing) ---
     const [folderWidth, setFolderWidth] = useState(200);
@@ -1080,6 +1081,21 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                                                 <path d="M13.73 21a2 2 0 0 1-3.46 0" />
                                             </svg>
                                         </button>
+                                        <button
+                                            onClick={() => {
+                                                if (!activeNote) return;
+                                                db.notes.update(activeNote.id, { loved: activeNote.loved ? 0 : 1 });
+                                            }}
+                                            className={activeNote?.loved ? 'active' : ''}
+                                            title={activeNote?.loved ? 'Remove from Loved' : 'Mark as Loved'}
+                                        >
+                                            <svg width="16" height="16" viewBox="0 0 24 24"
+                                                fill={activeNote?.loved ? '#ef4444' : 'none'}
+                                                stroke={activeNote?.loved ? '#ef4444' : 'currentColor'}
+                                                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                                            </svg>
+                                        </button>
                                     </div>
 
                                     {showReminderForm && (
@@ -1095,6 +1111,7 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                                                                 style={{ background: r.priority === 'high' ? '#ef4444' : r.priority === 'medium' ? '#f59e0b' : '#3b82f6' }}
                                                             />
                                                             <span className="reminder-existing-text">{r.text || 'Untitled'}</span>
+                                                            {r.repeat && <span className="reminder-repeat-badge">🔁 {r.repeat}</span>}
                                                             <span className="reminder-existing-due">
                                                                 {new Date(r.dueAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                                                             </span>
@@ -1103,7 +1120,10 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                                                                 onClick={() => {
                                                                     if (!activeNote) return;
                                                                     const updated = (activeNote.reminders || []).filter(rem => rem.id !== r.id);
-                                                                    db.notes.update(activeNote.id, { reminders: updated });
+                                                                    db.notes.update(activeNote.id, {
+                                                                        reminders: updated,
+                                                                        hasReminders: updated.length > 0 ? 1 : 0
+                                                                    });
                                                                 }}
                                                                 title="Remove this reminder"
                                                             >×</button>
@@ -1186,6 +1206,18 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                                                     ))}
                                                 </div>
                                             </div>
+                                            <div className="reminder-popover-row">
+                                                <label>Repeat</label>
+                                                <div className="reminder-repeat-btns">
+                                                    {([undefined, 'daily', 'weekdays', 'weekly', 'monthly', 'yearly'] as const).map(opt => (
+                                                        <button
+                                                            key={opt || 'never'}
+                                                            className={`reminder-repeat-chip ${reminderRepeat === opt ? 'selected' : ''}`}
+                                                            onClick={() => setReminderRepeat(opt)}
+                                                        >{opt ? opt.charAt(0).toUpperCase() + opt.slice(1) : 'Never'}</button>
+                                                    ))}
+                                                </div>
+                                            </div>
                                             <div className="reminder-popover-actions">
                                                 <button
                                                     className="reminder-popover-cancel"
@@ -1200,11 +1232,13 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                                                             id: crypto.randomUUID(),
                                                             text: reminderText || activeNote.title || 'Untitled',
                                                             dueAt: new Date(`${reminderDate}T${reminderTime}`),
-                                                            priority: reminderPriority
+                                                            priority: reminderPriority,
+                                                            repeat: reminderRepeat
                                                         };
-                                                        const existing = activeNote.reminders || [];
+                                                        const updatedReminders = [...(activeNote.reminders || []), newReminder];
                                                         db.notes.update(activeNote.id, {
-                                                            reminders: [...existing, newReminder]
+                                                            reminders: updatedReminders,
+                                                            hasReminders: 1
                                                         });
                                                         setShowReminderForm(false);
                                                     }}

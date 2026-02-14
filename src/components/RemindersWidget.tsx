@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
-import type { NoteReminder } from '../db';
+import type { NoteReminder, RepeatOption } from '../db';
 
 interface HomeDashboardProps {
     onSelectNote: (noteId: string) => void;
@@ -18,6 +18,32 @@ const priorityLabels: Record<string, string> = {
     medium: 'MED',
     low: 'LOW'
 };
+
+/** Compute next due date for a recurring reminder */
+function getNextOccurrence(current: Date, repeat: RepeatOption): Date {
+    const next = new Date(current);
+    switch (repeat) {
+        case 'daily':
+            next.setDate(next.getDate() + 1);
+            break;
+        case 'weekdays': {
+            // Advance to next weekday (Mon–Fri)
+            do { next.setDate(next.getDate() + 1); }
+            while (next.getDay() === 0 || next.getDay() === 6);
+            break;
+        }
+        case 'weekly':
+            next.setDate(next.getDate() + 7);
+            break;
+        case 'monthly':
+            next.setMonth(next.getMonth() + 1);
+            break;
+        case 'yearly':
+            next.setFullYear(next.getFullYear() + 1);
+            break;
+    }
+    return next;
+}
 
 // Flattened reminder with parent note info
 interface FlatReminder {
@@ -37,15 +63,51 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({ onSelectNote }) =>
     }, []);
 
     // Live query: all notes (we'll filter those with reminders)
-    const allNotes = useLiveQuery(
-        () => db.notes.toArray(),
-        []
+    // Optimized queries
+    // 1. Get notes with reminders
+    const reminderNotes = useLiveQuery(() =>
+        db.notes.where('hasReminders').equals(1).toArray()
     ) || [];
+
+    // 2. Get loved notes
+    const lovedNotes = useLiveQuery(() =>
+        db.notes.where('loved').equals(1).toArray()
+    ) || [];
+
+    // Combine for safety if needed, but for now treat independently
+    // The auto-advance effect needs to check relevant notes
+
+    // Auto-advance overdue recurring reminders
+    useEffect(() => {
+        if (!reminderNotes.length) return;
+
+        const nowMs = now.getTime();
+        reminderNotes.forEach(note => {
+            if (!note.reminders || note.reminders.length === 0) return;
+            let changed = false;
+            const updated = note.reminders.map(r => {
+                if (r.repeat && new Date(r.dueAt).getTime() < nowMs) {
+                    // Advance until dueAt is in the future
+                    let next = new Date(r.dueAt);
+                    while (next.getTime() < nowMs) {
+                        next = getNextOccurrence(next, r.repeat);
+                    }
+                    changed = true;
+                    return { ...r, dueAt: next };
+                }
+                return r;
+            });
+            if (changed) {
+                db.notes.update(note.id, { reminders: updated });
+            }
+        });
+    }, [reminderNotes, now]);
 
     // Flatten all reminders across notes
     const flatReminders: FlatReminder[] = React.useMemo(() => {
+        if (!reminderNotes.length) return [];
         const result: FlatReminder[] = [];
-        allNotes.forEach(n => {
+        reminderNotes.forEach(n => {
             if (n.reminders && n.reminders.length > 0) {
                 n.reminders.forEach(r => {
                     result.push({
@@ -59,7 +121,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({ onSelectNote }) =>
         // Sort by dueAt
         result.sort((a, b) => new Date(a.reminder.dueAt).getTime() - new Date(b.reminder.dueAt).getTime());
         return result;
-    }, [allNotes]);
+    }, [reminderNotes]);
 
     // Desktop notifications
     useEffect(() => {
@@ -112,10 +174,24 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({ onSelectNote }) =>
 
     const clearReminder = async (noteId: string, reminderId: string, e: React.MouseEvent) => {
         e.stopPropagation();
-        const note = allNotes.find(n => n.id === noteId);
+        const note = reminderNotes.find(n => n.id === noteId);
         if (!note) return;
-        const updated = (note.reminders || []).filter(r => r.id !== reminderId);
-        await db.notes.update(noteId, { reminders: updated });
+        const reminder = (note.reminders || []).find(r => r.id === reminderId);
+        if (reminder?.repeat) {
+            // Recurring: advance to next occurrence instead of deleting
+            const next = getNextOccurrence(new Date(reminder.dueAt), reminder.repeat);
+            const updated = (note.reminders || []).map(r =>
+                r.id === reminderId ? { ...r, dueAt: next } : r
+            );
+            await db.notes.update(noteId, { reminders: updated });
+        } else {
+            // One-time: delete
+            const updated = (note.reminders || []).filter(r => r.id !== reminderId);
+            await db.notes.update(noteId, {
+                reminders: updated,
+                hasReminders: updated.length > 0 ? 1 : 0
+            });
+        }
     };
 
     const formatDueDate = (d: Date) => {
@@ -191,17 +267,26 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({ onSelectNote }) =>
                                                 >
                                                     {priorityLabels[fr.reminder.priority]}
                                                 </span>
+                                                {fr.reminder.repeat && (
+                                                    <span className="home-repeat-badge">🔁 {fr.reminder.repeat}</span>
+                                                )}
                                             </div>
                                         </div>
                                         <button
                                             className="home-task-clear"
                                             onClick={e => clearReminder(fr.noteId, fr.reminder.id, e)}
-                                            title="Clear reminder"
+                                            title={fr.reminder.repeat ? 'Mark done (advances to next)' : 'Clear reminder'}
                                         >
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                <line x1="18" y1="6" x2="6" y2="18" />
-                                                <line x1="6" y1="6" x2="18" y2="18" />
-                                            </svg>
+                                            {fr.reminder.repeat ? (
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                    <polyline points="20 6 9 17 4 12" />
+                                                </svg>
+                                            ) : (
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                    <line x1="18" y1="6" x2="6" y2="18" />
+                                                    <line x1="6" y1="6" x2="18" y2="18" />
+                                                </svg>
+                                            )}
                                         </button>
                                     </div>
                                 ))}
@@ -210,6 +295,50 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({ onSelectNote }) =>
                     </div>
                 )}
             </div>
+
+            {/* Loved Notes */}
+            {(() => {
+                if (lovedNotes.length === 0) return null;
+                return (
+                    <div className="home-loved-section">
+                        <div className="home-loved-header">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="#ef4444" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                            </svg>
+                            <span>Loved Notes</span>
+                            <span className="home-loved-count">{lovedNotes.length}</span>
+                        </div>
+                        <div className="home-loved-grid">
+                            {lovedNotes.map(note => {
+                                // Strip HTML to get a plain-text preview
+                                const plainText = note.content
+                                    .replace(/<[^>]+>/g, ' ')
+                                    .replace(/\s+/g, ' ')
+                                    .trim();
+                                const preview = plainText.length > 80 ? plainText.slice(0, 80) + '…' : plainText;
+                                return (
+                                    <div
+                                        key={note.id}
+                                        className="home-loved-card"
+                                        onClick={() => onSelectNote(note.id)}
+                                    >
+                                        <div className="home-loved-card-title">
+                                            <span className="home-loved-heart">❤️</span>
+                                            {note.title || 'Untitled'}
+                                        </div>
+                                        {preview && (
+                                            <div className="home-loved-card-preview">{preview}</div>
+                                        )}
+                                        <div className="home-loved-card-date">
+                                            {new Date(note.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                );
+            })()}
         </div>
     );
 };
