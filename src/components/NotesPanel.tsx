@@ -24,6 +24,7 @@ import { FolderList } from './FolderList';
 import { exportToMarkdown, insertMarkdown } from '../services/llm';
 import { NotePreviewCard } from './NotePreviewCard';
 import { useDebounce } from '../hooks/useDebounce';
+import { RemindersWidget } from './RemindersWidget';
 
 interface NotesPanelProps {
     zenMode?: boolean;
@@ -759,6 +760,11 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                     />
                 </div>
 
+                <RemindersWidget
+                    activeNoteId={activeNoteId ?? undefined}
+                    activeNoteTitle={activeNote?.title}
+                />
+
                 {zenMode ? (
                     <button className="column-toggle-collapsed" onClick={onToggleZenMode}>
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 5l7 7-7 7" /><path d="M5 5l7 7-7 7" /></svg>
@@ -977,6 +983,31 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                                             :
                                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
                                         }
+                                    </button>
+
+                                    <button
+                                        className="icon-btn-ghost"
+                                        onClick={() => {
+                                            const title = prompt('Reminder title:', activeNote?.title || '');
+                                            if (!title) return;
+                                            const dateStr = prompt('Due date (YYYY-MM-DD):');
+                                            if (!dateStr) return;
+                                            const timeStr = prompt('Due time (HH:MM):', '09:00') || '09:00';
+                                            db.reminders.add({
+                                                id: Date.now().toString(),
+                                                noteId: activeNote?.id,
+                                                title: title,
+                                                dueAt: new Date(`${dateStr}T${timeStr}`),
+                                                done: false,
+                                                createdAt: new Date()
+                                            });
+                                        }}
+                                        title="Set Reminder for this Note"
+                                    >
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                                            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                                        </svg>
                                     </button>
 
                                     <div className="toolbar-divider" style={{ height: '16px', margin: '0' }} />

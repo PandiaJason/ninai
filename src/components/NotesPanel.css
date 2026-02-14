@@ -1085,3 +1085,189 @@ li[data-type="taskItem"]:focus-within {
     background-color: rgba(59, 130, 246, 0.05);
     border-radius: 4px;
 }
+
+/* ===== Reminders Widget ===== */
+.reminders-widget {
+    margin-top: auto;
+    flex-shrink: 0;
+}
+
+.reminders-clock {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    color: var(--text-primary);
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.1s;
+}
+
+.reminders-clock:hover {
+    background: rgba(0, 0, 0, 0.03);
+}
+
+.reminders-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 16px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    user-select: none;
+}
+
+.reminders-section-header:hover {
+    color: var(--text-secondary);
+}
+
+.reminders-list {
+    max-height: 200px;
+    overflow-y: auto;
+    padding-bottom: 8px;
+}
+
+.reminder-group-label {
+    padding: 6px 16px 2px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.reminder-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 4px 16px;
+    transition: background 0.1s;
+    cursor: default;
+}
+
+.reminder-item:hover {
+    background: rgba(0, 0, 0, 0.03);
+}
+
+.reminder-item.overdue .reminder-title {
+    color: var(--accent-danger, #ef4444);
+}
+
+.reminder-check {
+    background: none;
+    border: none;
+    padding: 2px;
+    cursor: pointer;
+    color: var(--text-tertiary);
+    flex-shrink: 0;
+    margin-top: 1px;
+    transition: color 0.1s;
+}
+
+.reminder-check:hover {
+    color: #10b981;
+}
+
+.reminder-title {
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.reminder-meta {
+    font-size: 0.7rem;
+    color: var(--text-tertiary);
+    line-height: 1.2;
+}
+
+.reminder-delete {
+    background: none;
+    border: none;
+    color: var(--text-tertiary);
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 0 2px;
+    opacity: 0;
+    transition: opacity 0.1s, color 0.1s;
+    flex-shrink: 0;
+}
+
+.reminder-item:hover .reminder-delete {
+    opacity: 1;
+}
+
+.reminder-delete:hover {
+    color: var(--accent-danger, #ef4444);
+}
+
+/* Add Reminder Form */
+.reminder-add-form {
+    padding: 8px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0 4px;
+    background: rgba(0, 0, 0, 0.02);
+    border-radius: 6px;
+}
+
+.reminder-input {
+    border: 1px solid var(--border-subtle);
+    background: var(--surface-low, #fff);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 0.8rem;
+    color: var(--text-primary);
+    outline: none;
+    font-family: inherit;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.reminder-input:focus {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px rgba(66, 133, 244, 0.15);
+}
+
+.reminder-btn-cancel {
+    background: none;
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    padding: 4px 12px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.reminder-btn-cancel:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.reminder-btn-add {
+    background: var(--text-primary);
+    border: none;
+    border-radius: 6px;
+    padding: 4px 14px;
+    font-size: 0.8rem;
+    color: white;
+    cursor: pointer;
+    font-weight: 500;
+    transition: opacity 0.1s;
+}
+
+.reminder-btn-add:hover {
+    opacity: 0.85;
+}
+
+.reminder-btn-add:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
