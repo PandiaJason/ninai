@@ -8,9 +8,9 @@ interface HomeDashboardProps {
 }
 
 const priorityColors: Record<string, string> = {
-    high: '#ef4444',
-    medium: '#f59e0b',
-    low: '#3b82f6'
+    high: '#ff3b30',   // Red
+    medium: '#ccff00', // Lime
+    low: '#0071e3'     // Blue
 };
 
 const priorityLabels: Record<string, string> = {

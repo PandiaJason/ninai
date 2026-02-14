@@ -1270,8 +1270,8 @@ li[data-type="taskItem"]:focus-within {
 }
 
 .home-loved-count {
-    background: rgba(239, 68, 68, 0.12);
-    color: #ef4444;
+    background: rgba(255, 59, 48, 0.1);
+    color: var(--color-red);
     font-size: 0.7rem;
     font-weight: 600;
     padding: 2px 8px;
@@ -1298,8 +1298,8 @@ li[data-type="taskItem"]:focus-within {
 
 .home-loved-card:hover {
     transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(239, 68, 68, 0.1);
-    border-color: rgba(239, 68, 68, 0.3);
+    box-shadow: 0 6px 20px rgba(255, 59, 48, 0.15);
+    border-color: rgba(255, 59, 48, 0.3);
 }
 
 .home-loved-card-title {
@@ -1611,8 +1611,8 @@ li[data-type="taskItem"]:focus-within {
 
 /* ===== Completed Tasks ===== */
 .home-group-label.completed-label {
-    color: #10b981;
-    /* Emerald-500 */
+    color: var(--color-green);
+    text-shadow: 0 0 1px rgba(0, 0, 0, 0.1);
 }
 
 .home-task-clear.is-delete {
@@ -1622,4 +1622,10 @@ li[data-type="taskItem"]:focus-within {
 .home-task-clear.is-delete:hover {
     color: var(--accent-danger, #ef4444);
     background: rgba(239, 68, 68, 0.1);
+}
+
+/* Priority Labels - readability for light colors */
+.home-priority-label {
+    text-shadow: 0 0 1px rgba(0, 0, 0, 0.2);
+    font-weight: 700;
 }
