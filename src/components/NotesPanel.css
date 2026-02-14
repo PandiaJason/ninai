@@ -1385,6 +1385,39 @@ li[data-type="taskItem"]:focus-within {
     margin-bottom: 2px;
 }
 
+/* Quick duration picks */
+.reminder-quick-picks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 4px;
+}
+
+.reminder-quick-chip {
+    background: var(--surface-low, #f5f5f5);
+    border: 1px solid var(--border-subtle, #e0e0e0);
+    border-radius: 12px;
+    padding: 3px 10px;
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+
+.reminder-quick-chip:hover {
+    background: rgba(59, 130, 246, 0.08);
+    border-color: rgba(59, 130, 246, 0.3);
+    color: var(--accent-primary, #3b82f6);
+}
+
+.reminder-quick-chip.selected {
+    background: rgba(59, 130, 246, 0.12);
+    border-color: var(--accent-primary, #3b82f6);
+    color: var(--accent-primary, #3b82f6);
+    font-weight: 600;
+}
+
 .reminder-existing-item {
     display: flex;
     align-items: center;

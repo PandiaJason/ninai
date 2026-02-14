@@ -1121,6 +1121,31 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                                                     <span>{reminderText.length > 50 ? reminderText.slice(0, 50) + '…' : reminderText}</span>
                                                 </div>
                                             )}
+                                            <div className="reminder-quick-picks">
+                                                {([
+                                                    { label: 'Tomorrow', days: 1 },
+                                                    { label: '3 Days', days: 3 },
+                                                    { label: '1 Week', days: 7 },
+                                                    { label: '2 Weeks', days: 14 },
+                                                    { label: '1 Month', days: 30 },
+                                                    { label: '3 Months', days: 90 },
+                                                    { label: '1 Year', days: 365 },
+                                                ] as const).map(opt => {
+                                                    const target = new Date();
+                                                    target.setDate(target.getDate() + opt.days);
+                                                    const iso = target.toISOString().split('T')[0];
+                                                    return (
+                                                        <button
+                                                            key={opt.label}
+                                                            className={`reminder-quick-chip ${reminderDate === iso ? 'selected' : ''}`}
+                                                            onClick={() => {
+                                                                setReminderDate(iso);
+                                                                setReminderTime('09:00');
+                                                            }}
+                                                        >{opt.label}</button>
+                                                    );
+                                                })}
+                                            </div>
                                             <div className="reminder-popover-row">
                                                 <label>Date</label>
                                                 <input
