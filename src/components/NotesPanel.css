@@ -1253,3 +1253,117 @@ li[data-type="taskItem"]:focus-within {
 .home-task-clear:hover {
     color: var(--accent-danger, #ef4444);
 }
+
+/* ===== Reminder Popover ===== */
+.reminder-popover {
+    background: var(--surface-low, #fff);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin: 4px 0 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 320px;
+}
+
+.reminder-popover-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.reminder-popover-row label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    min-width: 52px;
+}
+
+.reminder-popover-input {
+    flex: 1;
+    border: 1px solid var(--border-subtle);
+    background: var(--surface-low, #fff);
+    border-radius: 6px;
+    padding: 5px 8px;
+    font-size: 0.8rem;
+    color: var(--text-primary);
+    outline: none;
+    font-family: inherit;
+}
+
+.reminder-popover-input:focus {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px rgba(66, 133, 244, 0.15);
+}
+
+.reminder-priority-btns {
+    display: flex;
+    gap: 4px;
+    flex: 1;
+}
+
+.reminder-pri-btn {
+    flex: 1;
+    background: none;
+    border: 1.5px solid var(--border-subtle);
+    border-radius: 6px;
+    padding: 4px 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--text-tertiary);
+    transition: all 0.15s;
+}
+
+.reminder-pri-btn:hover {
+    background: rgba(0, 0, 0, 0.03);
+}
+
+.reminder-pri-btn.selected {
+    background: rgba(0, 0, 0, 0.03);
+}
+
+.reminder-popover-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+    margin-top: 2px;
+}
+
+.reminder-popover-cancel {
+    background: none;
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    padding: 5px 14px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.reminder-popover-cancel:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.reminder-popover-save {
+    background: var(--accent-primary, #3b82f6);
+    border: none;
+    border-radius: 6px;
+    padding: 5px 14px;
+    font-size: 0.8rem;
+    color: white;
+    cursor: pointer;
+    font-weight: 500;
+    transition: opacity 0.1s;
+}
+
+.reminder-popover-save:hover {
+    opacity: 0.85;
+}
+
+.reminder-popover-save:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}

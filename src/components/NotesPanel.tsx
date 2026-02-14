@@ -123,6 +123,12 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
     const [isCreatingFolder, setIsCreatingFolder] = useState(false);
     const [newFolderName, setNewFolderName] = useState('');
 
+    // --- Reminder Popover State ---
+    const [showReminderForm, setShowReminderForm] = useState(false);
+    const [reminderDate, setReminderDate] = useState('');
+    const [reminderTime, setReminderTime] = useState('09:00');
+    const [reminderPriority, setReminderPriority] = useState<'high' | 'medium' | 'low'>('medium');
+
     // --- Resizing Logic (RAF-optimized to avoid layout thrashing) ---
     const [folderWidth, setFolderWidth] = useState(200);
     const [listWidth, setListWidth] = useState(240);
@@ -1045,17 +1051,16 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                                                 if (!activeNote) return;
                                                 if (activeNote.dueAt) {
                                                     db.notes.update(activeNote.id, { dueAt: undefined, priority: undefined });
+                                                    setShowReminderForm(false);
                                                     return;
                                                 }
-                                                const dateStr = prompt('Set reminder date (YYYY-MM-DD):');
-                                                if (!dateStr) return;
-                                                const timeStr = prompt('Time (HH:MM):', '09:00') || '09:00';
-                                                const pri = prompt('Priority (high / medium / low):', 'medium') || 'medium';
-                                                const validPri = ['high', 'medium', 'low'].includes(pri) ? pri as 'high' | 'medium' | 'low' : 'medium';
-                                                db.notes.update(activeNote.id, {
-                                                    dueAt: new Date(`${dateStr}T${timeStr}`),
-                                                    priority: validPri
-                                                });
+                                                // Pre-fill with tomorrow's date
+                                                const tomorrow = new Date();
+                                                tomorrow.setDate(tomorrow.getDate() + 1);
+                                                setReminderDate(tomorrow.toISOString().split('T')[0]);
+                                                setReminderTime('09:00');
+                                                setReminderPriority('medium');
+                                                setShowReminderForm(!showReminderForm);
                                             }}
                                             className={activeNote?.dueAt ? 'active' : ''}
                                             title={activeNote?.dueAt ? 'Clear Reminder' : 'Set Reminder'}
@@ -1067,6 +1072,69 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                                             </svg>
                                         </button>
                                     </div>
+
+                                    {showReminderForm && (
+                                        <div className="reminder-popover">
+                                            <div className="reminder-popover-row">
+                                                <label>Date</label>
+                                                <input
+                                                    type="date"
+                                                    value={reminderDate}
+                                                    onChange={e => setReminderDate(e.target.value)}
+                                                    className="reminder-popover-input"
+                                                />
+                                            </div>
+                                            <div className="reminder-popover-row">
+                                                <label>Time</label>
+                                                <input
+                                                    type="time"
+                                                    value={reminderTime}
+                                                    onChange={e => setReminderTime(e.target.value)}
+                                                    className="reminder-popover-input"
+                                                />
+                                            </div>
+                                            <div className="reminder-popover-row">
+                                                <label>Priority</label>
+                                                <div className="reminder-priority-btns">
+                                                    {(['high', 'medium', 'low'] as const).map(p => (
+                                                        <button
+                                                            key={p}
+                                                            className={`reminder-pri-btn ${reminderPriority === p ? 'selected' : ''}`}
+                                                            style={{
+                                                                borderColor: reminderPriority === p
+                                                                    ? (p === 'high' ? '#ef4444' : p === 'medium' ? '#f59e0b' : '#3b82f6')
+                                                                    : undefined,
+                                                                color: reminderPriority === p
+                                                                    ? (p === 'high' ? '#ef4444' : p === 'medium' ? '#f59e0b' : '#3b82f6')
+                                                                    : undefined
+                                                            }}
+                                                            onClick={() => setReminderPriority(p)}
+                                                        >
+                                                            {p.charAt(0).toUpperCase() + p.slice(1)}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            <div className="reminder-popover-actions">
+                                                <button
+                                                    className="reminder-popover-cancel"
+                                                    onClick={() => setShowReminderForm(false)}
+                                                >Cancel</button>
+                                                <button
+                                                    className="reminder-popover-save"
+                                                    disabled={!reminderDate}
+                                                    onClick={() => {
+                                                        if (!activeNote || !reminderDate) return;
+                                                        db.notes.update(activeNote.id, {
+                                                            dueAt: new Date(`${reminderDate}T${reminderTime}`),
+                                                            priority: reminderPriority
+                                                        });
+                                                        setShowReminderForm(false);
+                                                    }}
+                                                >Set Reminder</button>
+                                            </div>
+                                        </div>
+                                    )}
 
                                     <div className="editor-content-area">
                                         <EditorContent editor={editor} />
