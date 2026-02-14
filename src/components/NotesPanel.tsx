@@ -761,8 +761,7 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                 </div>
 
                 <RemindersWidget
-                    activeNoteId={activeNoteId ?? undefined}
-                    activeNoteTitle={activeNote?.title}
+                    onSelectNote={(noteId) => setActiveNoteId(noteId)}
                 />
 
                 {zenMode ? (
@@ -988,21 +987,21 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                                     <button
                                         className="icon-btn-ghost"
                                         onClick={() => {
-                                            const title = prompt('Reminder title:', activeNote?.title || '');
-                                            if (!title) return;
-                                            const dateStr = prompt('Due date (YYYY-MM-DD):');
+                                            if (!activeNote) return;
+                                            if (activeNote.dueAt) {
+                                                // Clear existing reminder
+                                                db.notes.update(activeNote.id, { dueAt: undefined });
+                                                return;
+                                            }
+                                            const dateStr = prompt('Set reminder date (YYYY-MM-DD):');
                                             if (!dateStr) return;
-                                            const timeStr = prompt('Due time (HH:MM):', '09:00') || '09:00';
-                                            db.reminders.add({
-                                                id: Date.now().toString(),
-                                                noteId: activeNote?.id,
-                                                title: title,
-                                                dueAt: new Date(`${dateStr}T${timeStr}`),
-                                                done: false,
-                                                createdAt: new Date()
+                                            const timeStr = prompt('Time (HH:MM):', '09:00') || '09:00';
+                                            db.notes.update(activeNote.id, {
+                                                dueAt: new Date(`${dateStr}T${timeStr}`)
                                             });
                                         }}
-                                        title="Set Reminder for this Note"
+                                        title={activeNote?.dueAt ? 'Clear Reminder' : 'Set Reminder for this Note'}
+                                        style={{ color: activeNote?.dueAt ? '#f59e0b' : undefined }}
                                     >
                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />

@@ -6,6 +6,7 @@ export interface Note {
     title: string;
     content: string;
     updatedAt: Date;
+    dueAt?: Date;      // Optional reminder due date
 }
 
 
@@ -17,24 +18,21 @@ export interface Folder {
     order?: number;    // For drag-and-drop sorting
 }
 
-export interface Reminder {
-    id: string;
-    noteId?: string;     // Optional link to a note
-    title: string;
-    dueAt: Date;
-    done: boolean;
-    createdAt: Date;
-}
-
 export class NinaiDB extends Dexie {
     notes!: Table<Note>;
     folders!: Table<Folder>;
-    reminders!: Table<Reminder>;
 
     constructor() {
         super('NinaiDB');
 
-        // Version 3: Add reminders table
+        // Version 4: Add dueAt to notes, remove reminders table
+        this.version(4).stores({
+            notes: 'id, folderId, title, updatedAt, dueAt',
+            folders: 'id, name, parentId, order',
+            reminders: null  // Delete the reminders table
+        });
+
+        // Version 3: Add reminders table (legacy)
         this.version(3).stores({
             notes: 'id, folderId, title, updatedAt',
             folders: 'id, name, parentId, order',
