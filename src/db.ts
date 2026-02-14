@@ -7,6 +7,7 @@ export interface Note {
     content: string;
     updatedAt: Date;
     dueAt?: Date;      // Optional reminder due date
+    priority?: 'low' | 'medium' | 'high';  // Task priority
 }
 
 

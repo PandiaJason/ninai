@@ -24,7 +24,7 @@ import { FolderList } from './FolderList';
 import { exportToMarkdown, insertMarkdown } from '../services/llm';
 import { NotePreviewCard } from './NotePreviewCard';
 import { useDebounce } from '../hooks/useDebounce';
-import { RemindersWidget } from './RemindersWidget';
+import { HomeDashboard } from './RemindersWidget';
 
 interface NotesPanelProps {
     zenMode?: boolean;
@@ -760,10 +760,6 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                     />
                 </div>
 
-                <RemindersWidget
-                    onSelectNote={(noteId) => setActiveNoteId(noteId)}
-                />
-
                 {zenMode ? (
                     <button className="column-toggle-collapsed" onClick={onToggleZenMode}>
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 5l7 7-7 7" /><path d="M5 5l7 7-7 7" /></svg>
@@ -887,254 +883,251 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
             </div>
 
             {/* 3. Editor Stage */}
-            {showEditor && (
-                <div
-                    className={`editor-stage ${isCreatingFolder ? 'blur-sm' : ''}`}
-                    onDragOver={(e) => {
-                        e.preventDefault();
-                        e.currentTarget.classList.add('drag-over-active');
-                    }}
-                    onDragLeave={(e) => {
-                        e.preventDefault();
-                        e.currentTarget.classList.remove('drag-over-active');
-                    }}
-                    onDrop={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        e.currentTarget.classList.remove('drag-over-active');
-                        if (!editor) return;
-                        const html = e.dataTransfer.getData('text/html');
-                        const text = e.dataTransfer.getData('text/plain');
-                        if (html || text) {
-                            processSmartPaste(editor, { text, html });
-                        }
-                    }}
-                >
-                    {activeNote ? (
-                        <>
-                            <div className="editor-toolbar-clean">
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                    {(!showFolders || !showList) && (
+            {
+                showEditor && (
+                    <div
+                        className={`editor-stage ${isCreatingFolder ? 'blur-sm' : ''}`}
+                        onDragOver={(e) => {
+                            e.preventDefault();
+                            e.currentTarget.classList.add('drag-over-active');
+                        }}
+                        onDragLeave={(e) => {
+                            e.preventDefault();
+                            e.currentTarget.classList.remove('drag-over-active');
+                        }}
+                        onDrop={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            e.currentTarget.classList.remove('drag-over-active');
+                            if (!editor) return;
+                            const html = e.dataTransfer.getData('text/html');
+                            const text = e.dataTransfer.getData('text/plain');
+                            if (html || text) {
+                                processSmartPaste(editor, { text, html });
+                            }
+                        }}
+                    >
+                        {activeNote ? (
+                            <>
+                                <div className="editor-toolbar-clean">
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                        {(!showFolders || !showList) && (
+                                            <button
+                                                className="icon-btn-ghost"
+                                                onClick={() => { setShowFolders(true); setShowList(true); }}
+                                                title="Show Sidebars"
+                                                style={{ marginLeft: '-8px' }}
+                                            >
+                                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                                    <line x1="9" y1="3" x2="9" y2="21"></line>
+                                                </svg>
+                                            </button>
+                                        )}
+                                        <ExportButton editor={editor} />
+                                        <ImportButton editor={editor} onImportFromWebview={onImportFromWebview} />
+                                        <div style={{ width: '1px', height: '16px', background: 'var(--border-color)', margin: '0 4px' }}></div>
                                         <button
-                                            className="icon-btn-ghost"
-                                            onClick={() => { setShowFolders(true); setShowList(true); }}
-                                            title="Show Sidebars"
-                                            style={{ marginLeft: '-8px' }}
+                                            className="icon-btn-primary"
+                                            onClick={async () => {
+                                                if (!activeNote || !editor) return;
+                                                const title = activeNote.title || 'Untitled';
+                                                const html = editor.getHTML();
+                                                try {
+                                                    // @ts-expect-error Electron API
+                                                    if (window.electronAPI && window.electronAPI.printToPDF) {
+                                                        // @ts-expect-error Electron API
+                                                        await window.electronAPI.printToPDF(title, html);
+                                                    } else {
+                                                        alert("PDF Export is only available in the Desktop app.");
+                                                    }
+                                                } catch (e) {
+                                                    console.error("PDF Export failed", e);
+                                                    alert("Failed to export PDF.");
+                                                }
+                                            }}
+                                            title="Export as PDF"
                                         >
-                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                                                <line x1="9" y1="3" x2="9" y2="21"></line>
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                                <polyline points="14 2 14 8 20 8"></polyline>
+                                                <line x1="16" y1="13" x2="8" y2="13"></line>
+                                                <line x1="16" y1="17" x2="8" y2="17"></line>
+                                                <polyline points="10 9 9 9 8 9"></polyline>
                                             </svg>
                                         </button>
-                                    )}
-                                    <ExportButton editor={editor} />
-                                    <ImportButton editor={editor} onImportFromWebview={onImportFromWebview} />
-                                    <div style={{ width: '1px', height: '16px', background: 'var(--border-color)', margin: '0 4px' }}></div>
-                                    <button
-                                        className="icon-btn-primary"
-                                        onClick={async () => {
-                                            if (!activeNote || !editor) return;
-                                            const title = activeNote.title || 'Untitled';
-                                            const html = editor.getHTML();
-                                            try {
-                                                // @ts-expect-error Electron API
-                                                if (window.electronAPI && window.electronAPI.printToPDF) {
-                                                    // @ts-expect-error Electron API
-                                                    await window.electronAPI.printToPDF(title, html);
-                                                } else {
-                                                    alert("PDF Export is only available in the Desktop app.");
+
+                                        <button
+                                            className={`icon-btn-primary ${isFullScreen ? 'active' : ''}`}
+                                            onClick={toggleFullScreen}
+                                            title={isFullScreen ? "Exit Focus Mode" : "Focus Mode (Hide Sidebar)"}
+                                        >
+                                            {isFullScreen ?
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" /></svg>
+                                                :
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></svg>
+                                            }
+                                        </button>
+
+                                        <button
+                                            className={`icon-btn-primary ${zenMode ? 'active' : ''}`}
+                                            onClick={onToggleZenMode}
+                                            title={zenMode ? "Show Browser" : "Zen Mode (Hide Browser)"}
+                                        >
+                                            {zenMode ?
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>
+                                                :
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
+                                            }
+                                        </button>
+
+
+
+                                        <button
+                                            className="icon-btn-ghost"
+                                            onClick={() => deleteNote(activeNote?.id)}
+                                            title="Delete Note"
+                                        >
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                        </button>
+                                        <button className="action-link" onClick={downloadMarkdown}>Export</button>
+                                    </div>
+                                </div>
+
+                                <div className="editor-canvas">
+                                    <input
+                                        ref={titleInputRef}
+                                        className="clean-title-input"
+                                        value={localTitle}
+                                        onChange={(e) => {
+                                            setLocalTitle(e.target.value);
+                                            updateNote('title', e.target.value);
+                                        }}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Tab') {
+                                                e.preventDefault();
+                                                editor?.commands.focus();
+                                            }
+                                        }}
+                                        placeholder="Title"
+                                    />
+
+                                    <div className="formatting-toolbar">
+                                        <button onClick={() => toggleFormat('h1')} className={editor?.isActive('heading', { level: 1 }) ? 'active' : ''} title="Heading 1" style={{ fontSize: '13px', fontWeight: 600 }}>H1</button>
+                                        <button onClick={() => toggleFormat('h2')} className={editor?.isActive('heading', { level: 2 }) ? 'active' : ''} title="Heading 2" style={{ fontSize: '13px', fontWeight: 600 }}>H2</button>
+                                        <button onClick={() => toggleFormat('h3')} className={editor?.isActive('heading', { level: 3 }) ? 'active' : ''} title="Heading 3" style={{ fontSize: '13px', fontWeight: 600 }}>H3</button>
+                                        <button onClick={() => toggleFormat('paragraph')} className={editor?.isActive('paragraph') ? 'active' : ''} title="Body Text" style={{ fontSize: '13px', fontWeight: 500 }}>Body</button>
+                                        <div className="toolbar-divider" />
+                                        <button onClick={() => toggleFormat('bold')} className={editor?.isActive('bold') ? 'active' : ''} title="Bold">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path></svg>
+                                        </button>
+                                        <button onClick={() => toggleFormat('italic')} className={editor?.isActive('italic') ? 'active' : ''} title="Italic">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="4" x2="10" y2="4"></line><line x1="14" y1="20" x2="5" y2="20"></line><line x1="15" y1="4" x2="9" y2="20"></line></svg>
+                                        </button>
+                                        <div className="toolbar-divider" />
+                                        <button onClick={() => toggleFormat('bullet')} className={editor?.isActive('bulletList') ? 'active' : ''} title="Bullet List">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                                        </button>
+                                        <button onClick={() => toggleFormat('task')} className={editor?.isActive('taskList') ? 'active' : ''} title="Checklist (TickBox)">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+                                        </button>
+                                        <div className="toolbar-divider" />
+                                        <button
+                                            onClick={() => toggleFormat('code')}
+                                            className={editor?.isActive('codeBlock') ? 'active' : ''}
+                                            title="Code Block"
+                                        >
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+                                        </button>
+                                        <div className="toolbar-divider" />
+                                        <button
+                                            onClick={() => {
+                                                if (!activeNote) return;
+                                                if (activeNote.dueAt) {
+                                                    db.notes.update(activeNote.id, { dueAt: undefined, priority: undefined });
+                                                    return;
                                                 }
-                                            } catch (e) {
-                                                console.error("PDF Export failed", e);
-                                                alert("Failed to export PDF.");
-                                            }
-                                        }}
-                                        title="Export as PDF"
-                                    >
-                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                                            <polyline points="14 2 14 8 20 8"></polyline>
-                                            <line x1="16" y1="13" x2="8" y2="13"></line>
-                                            <line x1="16" y1="17" x2="8" y2="17"></line>
-                                            <polyline points="10 9 9 9 8 9"></polyline>
-                                        </svg>
-                                    </button>
+                                                const dateStr = prompt('Set reminder date (YYYY-MM-DD):');
+                                                if (!dateStr) return;
+                                                const timeStr = prompt('Time (HH:MM):', '09:00') || '09:00';
+                                                const pri = prompt('Priority (high / medium / low):', 'medium') || 'medium';
+                                                const validPri = ['high', 'medium', 'low'].includes(pri) ? pri as 'high' | 'medium' | 'low' : 'medium';
+                                                db.notes.update(activeNote.id, {
+                                                    dueAt: new Date(`${dateStr}T${timeStr}`),
+                                                    priority: validPri
+                                                });
+                                            }}
+                                            className={activeNote?.dueAt ? 'active' : ''}
+                                            title={activeNote?.dueAt ? 'Clear Reminder' : 'Set Reminder'}
+                                            style={{ color: activeNote?.dueAt ? '#f59e0b' : undefined }}
+                                        >
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                                                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                                            </svg>
+                                        </button>
+                                    </div>
 
-                                    <button
-                                        className={`icon-btn-primary ${isFullScreen ? 'active' : ''}`}
-                                        onClick={toggleFullScreen}
-                                        title={isFullScreen ? "Exit Focus Mode" : "Focus Mode (Hide Sidebar)"}
-                                    >
-                                        {isFullScreen ?
-                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" /></svg>
-                                            :
-                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></svg>
-                                        }
-                                    </button>
-
-                                    <button
-                                        className={`icon-btn-primary ${zenMode ? 'active' : ''}`}
-                                        onClick={onToggleZenMode}
-                                        title={zenMode ? "Show Browser" : "Zen Mode (Hide Browser)"}
-                                    >
-                                        {zenMode ?
-                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>
-                                            :
-                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
-                                        }
-                                    </button>
-
-                                    <button
-                                        className="icon-btn-ghost"
-                                        onClick={() => {
-                                            if (!activeNote) return;
-                                            if (activeNote.dueAt) {
-                                                // Clear existing reminder
-                                                db.notes.update(activeNote.id, { dueAt: undefined });
-                                                return;
-                                            }
-                                            const dateStr = prompt('Set reminder date (YYYY-MM-DD):');
-                                            if (!dateStr) return;
-                                            const timeStr = prompt('Time (HH:MM):', '09:00') || '09:00';
-                                            db.notes.update(activeNote.id, {
-                                                dueAt: new Date(`${dateStr}T${timeStr}`)
-                                            });
-                                        }}
-                                        title={activeNote?.dueAt ? 'Clear Reminder' : 'Set Reminder for this Note'}
-                                        style={{ color: activeNote?.dueAt ? '#f59e0b' : undefined }}
-                                    >
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                                            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                                        </svg>
-                                    </button>
-
-                                    <div className="toolbar-divider" style={{ height: '16px', margin: '0' }} />
-
-                                    <button
-                                        className="icon-btn-ghost"
-                                        onClick={() => deleteNote(activeNote?.id)}
-                                        title="Delete Note"
-                                    >
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                                    </button>
-                                    <button className="action-link" onClick={downloadMarkdown}>Export</button>
+                                    <div className="editor-content-area">
+                                        <EditorContent editor={editor} />
+                                    </div>
                                 </div>
+                            </>
+                        ) : (
+                            <HomeDashboard onSelectNote={(noteId) => setActiveNoteId(noteId)} />
+                        )}
+                    </div>
+                )
+            }
+
+            {
+                !showEditor && (
+                    <div className="editor-collapsed-handle">
+                        <button className="column-toggle-collapsed" onClick={() => setShowEditor(true)}>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 19l-7-7 7-7m8 14l-7-7 7-7" /></svg>
+                        </button>
+                    </div>
+                )
+            }
+
+            {
+                moveTarget && (
+                    <div className="modal-backdrop" onClick={() => setMoveTarget(null)}>
+                        <div className="modal-content" onClick={e => e.stopPropagation()}>
+                            <div className="modal-header">
+                                <h3>Move {moveTarget.type === 'note' ? 'Note' : 'Folder'}</h3>
                             </div>
-
-                            <div className="editor-canvas">
-                                <input
-                                    ref={titleInputRef}
-                                    className="clean-title-input"
-                                    value={localTitle}
-                                    onChange={(e) => {
-                                        setLocalTitle(e.target.value);
-                                        updateNote('title', e.target.value);
-                                    }}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Tab') {
-                                            e.preventDefault();
-                                            editor?.commands.focus();
-                                        }
-                                    }}
-                                    placeholder="Title"
-                                />
-
-                                <div className="formatting-toolbar">
-                                    <button onClick={() => toggleFormat('h1')} className={editor?.isActive('heading', { level: 1 }) ? 'active' : ''} title="Heading 1" style={{ fontSize: '13px', fontWeight: 600 }}>H1</button>
-                                    <button onClick={() => toggleFormat('h2')} className={editor?.isActive('heading', { level: 2 }) ? 'active' : ''} title="Heading 2" style={{ fontSize: '13px', fontWeight: 600 }}>H2</button>
-                                    <button onClick={() => toggleFormat('h3')} className={editor?.isActive('heading', { level: 3 }) ? 'active' : ''} title="Heading 3" style={{ fontSize: '13px', fontWeight: 600 }}>H3</button>
-                                    <button onClick={() => toggleFormat('paragraph')} className={editor?.isActive('paragraph') ? 'active' : ''} title="Body Text" style={{ fontSize: '13px', fontWeight: 500 }}>Body</button>
-                                    <div className="toolbar-divider" />
-                                    <button onClick={() => toggleFormat('bold')} className={editor?.isActive('bold') ? 'active' : ''} title="Bold">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path></svg>
-                                    </button>
-                                    <button onClick={() => toggleFormat('italic')} className={editor?.isActive('italic') ? 'active' : ''} title="Italic">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="4" x2="10" y2="4"></line><line x1="14" y1="20" x2="5" y2="20"></line><line x1="15" y1="4" x2="9" y2="20"></line></svg>
-                                    </button>
-                                    <div className="toolbar-divider" />
-                                    <button onClick={() => toggleFormat('bullet')} className={editor?.isActive('bulletList') ? 'active' : ''} title="Bullet List">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
-                                    </button>
-                                    <button onClick={() => toggleFormat('task')} className={editor?.isActive('taskList') ? 'active' : ''} title="Checklist (TickBox)">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
-                                    </button>
-                                    <div className="toolbar-divider" />
-                                    <button
-                                        onClick={() => toggleFormat('code')}
-                                        className={editor?.isActive('codeBlock') ? 'active' : ''}
-                                        title="Code Block"
-                                    >
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
-                                    </button>
-                                </div>
-
-                                <div className="editor-content-area">
-                                    <EditorContent editor={editor} />
-                                </div>
-                            </div>
-                        </>
-                    ) : (
-                        <div className="empty-stage">
-                            <div className="empty-icon">
-                                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                                    <polyline points="14 2 14 8 20 8" />
-                                    <line x1="16" y1="13" x2="8" y2="13" />
-                                    <line x1="16" y1="17" x2="8" y2="17" />
-                                    <polyline points="10 9 9 9 8 9" />
-                                </svg>
-                            </div>
-                            <p>Select a note to start writing</p>
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {!showEditor && (
-                <div className="editor-collapsed-handle">
-                    <button className="column-toggle-collapsed" onClick={() => setShowEditor(true)}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 19l-7-7 7-7m8 14l-7-7 7-7" /></svg>
-                    </button>
-                </div>
-            )}
-
-            {moveTarget && (
-                <div className="modal-backdrop" onClick={() => setMoveTarget(null)}>
-                    <div className="modal-content" onClick={e => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <h3>Move {moveTarget.type === 'note' ? 'Note' : 'Folder'}</h3>
-                        </div>
-                        <div className="folder-select-list">
-                            <button
-                                className={`folder-select-item ${activeFolderId === 'ninai' ? 'active' : ''}`}
-                                onClick={() => handleMoveItem('ninai')}
-                            >
-                                <span className="folder-icon">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-                                </span> Home (NINAI)
-                            </button>
-                            {folderOptions.map(f => (
+                            <div className="folder-select-list">
                                 <button
-                                    key={f.id}
-                                    className="folder-select-item"
-                                    style={{ paddingLeft: `${f.depth * 20 + 12}px` }}
-                                    onClick={() => handleMoveItem(f.id)}
-                                    disabled={moveTarget.type === 'folder' && moveTarget.id === f.id}
+                                    className={`folder-select-item ${activeFolderId === 'ninai' ? 'active' : ''}`}
+                                    onClick={() => handleMoveItem('ninai')}
                                 >
-                                    {f.depth > 0 ? '' : ''}<span className="folder-icon">
+                                    <span className="folder-icon">
                                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-                                    </span> {f.name}
+                                    </span> Home (NINAI)
                                 </button>
-                            ))}
-                            <div className="modal-actions">
-                                <button className="close-btn" onClick={() => setMoveTarget(null)}>Cancel</button>
+                                {folderOptions.map(f => (
+                                    <button
+                                        key={f.id}
+                                        className="folder-select-item"
+                                        style={{ paddingLeft: `${f.depth * 20 + 12}px` }}
+                                        onClick={() => handleMoveItem(f.id)}
+                                        disabled={moveTarget.type === 'folder' && moveTarget.id === f.id}
+                                    >
+                                        {f.depth > 0 ? '' : ''}<span className="folder-icon">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                                        </span> {f.name}
+                                    </button>
+                                ))}
+                                <div className="modal-actions">
+                                    <button className="close-btn" onClick={() => setMoveTarget(null)}>Cancel</button>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 };
 
