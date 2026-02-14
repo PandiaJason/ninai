@@ -8,6 +8,7 @@ export interface NoteReminder {
     dueAt: Date;                         // When it's due
     priority: 'low' | 'medium' | 'high'; // Priority level
     repeat?: RepeatOption;               // Recurrence (undefined = one-time)
+    completedAt?: Date;                  // Completion timestamp
 }
 
 export interface Note {

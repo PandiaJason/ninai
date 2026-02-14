@@ -152,6 +152,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({ onSelectNote }) =>
         nextWeek.setDate(nextWeek.getDate() + 7);
 
         const groups: { label: string; items: FlatReminder[] }[] = [
+            { label: 'Completed', items: [] },
             { label: 'Overdue', items: [] },
             { label: 'Today', items: [] },
             { label: 'Tomorrow', items: [] },
@@ -160,37 +161,56 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({ onSelectNote }) =>
         ];
 
         flatReminders.forEach(fr => {
+            if (fr.reminder.completedAt) {
+                groups[0].items.push(fr);
+                return;
+            }
+
             const d = new Date(fr.reminder.dueAt);
             const dDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-            if (dDate < today) groups[0].items.push(fr);
-            else if (dDate.getTime() === today.getTime()) groups[1].items.push(fr);
-            else if (dDate.getTime() === tomorrow.getTime()) groups[2].items.push(fr);
-            else if (dDate < nextWeek) groups[3].items.push(fr);
-            else groups[4].items.push(fr);
+            if (dDate < today) groups[1].items.push(fr);
+            else if (dDate.getTime() === today.getTime()) groups[2].items.push(fr);
+            else if (dDate.getTime() === tomorrow.getTime()) groups[3].items.push(fr);
+            else if (dDate < nextWeek) groups[4].items.push(fr);
+            else groups[5].items.push(fr);
+        });
+
+        // specific sort for completed: most recently completed first
+        groups[0].items.sort((a, b) => {
+            const tA = new Date(a.reminder.completedAt!).getTime();
+            const tB = new Date(b.reminder.completedAt!).getTime();
+            return tB - tA;
         });
 
         return groups.filter(g => g.items.length > 0);
     }, [flatReminders, now]);
 
-    const clearReminder = async (noteId: string, reminderId: string, e: React.MouseEvent) => {
+    const toggleComplete = async (noteId: string, reminderId: string, e: React.MouseEvent) => {
         e.stopPropagation();
         const note = reminderNotes.find(n => n.id === noteId);
         if (!note) return;
         const reminder = (note.reminders || []).find(r => r.id === reminderId);
-        if (reminder?.repeat) {
-            // Recurring: advance to next occurrence instead of deleting
+
+        if (reminder?.completedAt) {
+            // Completed -> Delete (Trash)
+            const updated = (note.reminders || []).filter(r => r.id !== reminderId);
+            await db.notes.update(noteId, {
+                reminders: updated,
+                hasReminders: updated.length > 0 ? 1 : 0
+            });
+        } else if (reminder?.repeat) {
+            // Recurring: advance to next occurrence
             const next = getNextOccurrence(new Date(reminder.dueAt), reminder.repeat);
             const updated = (note.reminders || []).map(r =>
                 r.id === reminderId ? { ...r, dueAt: next } : r
             );
             await db.notes.update(noteId, { reminders: updated });
         } else {
-            // One-time: delete
-            const updated = (note.reminders || []).filter(r => r.id !== reminderId);
-            await db.notes.update(noteId, {
-                reminders: updated,
-                hasReminders: updated.length > 0 ? 1 : 0
-            });
+            // One-time: Mark as completed
+            const updated = (note.reminders || []).map(r =>
+                r.id === reminderId ? { ...r, completedAt: new Date() } : r
+            );
+            await db.notes.update(noteId, { reminders: updated });
         }
     };
 
@@ -239,7 +259,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({ onSelectNote }) =>
                     <div className="home-tasks-list">
                         {grouped.map(group => (
                             <div key={group.label} className="home-task-group">
-                                <div className={`home-group-label ${group.label === 'Overdue' ? 'overdue' : ''}`}>
+                                <div className={`home-group-label ${group.label === 'Overdue' ? 'overdue' : group.label === 'Completed' ? 'completed-label' : ''}`}>
                                     {group.label}
                                 </div>
                                 {group.items.map(fr => (
@@ -255,7 +275,12 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({ onSelectNote }) =>
                                                     style={{ background: priorityColors[fr.reminder.priority] }}
                                                     title={fr.reminder.priority}
                                                 />
-                                                {fr.reminder.text || 'Untitled'}
+                                                <span style={{
+                                                    textDecoration: fr.reminder.completedAt ? 'line-through' : 'none',
+                                                    opacity: fr.reminder.completedAt ? 0.6 : 1
+                                                }}>
+                                                    {fr.reminder.text || 'Untitled'}
+                                                </span>
                                             </div>
                                             <div className="home-task-meta">
                                                 <span className="home-task-note-name">{fr.noteTitle}</span>
@@ -273,18 +298,24 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({ onSelectNote }) =>
                                             </div>
                                         </div>
                                         <button
-                                            className="home-task-clear"
-                                            onClick={e => clearReminder(fr.noteId, fr.reminder.id, e)}
-                                            title={fr.reminder.repeat ? 'Mark done (advances to next)' : 'Clear reminder'}
+                                            className={`home-task-clear ${fr.reminder.completedAt ? 'is-delete' : ''}`}
+                                            onClick={e => toggleComplete(fr.noteId, fr.reminder.id, e)}
+                                            title={fr.reminder.completedAt ? 'Delete forever' : fr.reminder.repeat ? 'Mark done (advances to next)' : 'Mark done'}
                                         >
-                                            {fr.reminder.repeat ? (
+                                            {fr.reminder.completedAt ? (
+                                                // Trash icon for completed
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                    <polyline points="3 6 5 6 21 6" />
+                                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                                </svg>
+                                            ) : fr.reminder.repeat ? (
                                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                                     <polyline points="20 6 9 17 4 12" />
                                                 </svg>
                                             ) : (
-                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                    <line x1="18" y1="6" x2="6" y2="18" />
-                                                    <line x1="6" y1="6" x2="18" y2="18" />
+                                                // Check icon for one-time (initially)
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                    <polyline points="20 6 9 17 4 12" />
                                                 </svg>
                                             )}
                                         </button>
@@ -323,7 +354,6 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({ onSelectNote }) =>
                                         onClick={() => onSelectNote(note.id)}
                                     >
                                         <div className="home-loved-card-title">
-                                            <span className="home-loved-heart">❤️</span>
                                             {note.title || 'Untitled'}
                                         </div>
                                         {preview && (

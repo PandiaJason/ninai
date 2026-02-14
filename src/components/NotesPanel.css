@@ -1608,3 +1608,18 @@ li[data-type="taskItem"]:focus-within {
     margin: 0 2px;
     color: var(--text-tertiary);
 }
+
+/* ===== Completed Tasks ===== */
+.home-group-label.completed-label {
+    color: #10b981;
+    /* Emerald-500 */
+}
+
+.home-task-clear.is-delete {
+    color: var(--text-tertiary, #9ca3af);
+}
+
+.home-task-clear.is-delete:hover {
+    color: var(--accent-danger, #ef4444);
+    background: rgba(239, 68, 68, 0.1);
+}
