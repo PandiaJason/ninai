@@ -1,6 +1,6 @@
 const { contextBridge, ipcRenderer, clipboard } = require('electron');
 
-console.log('Preload script loaded successfully');
+// console.log('Preload script loaded successfully');
 
 contextBridge.exposeInMainWorld('electronAPI', {
     hardReset: () => ipcRenderer.invoke('hard-reset'),

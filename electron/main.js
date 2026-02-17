@@ -20,12 +20,12 @@ function createWindow() {
 
     // Handle hard reset request from renderer
     ipcMain.handle('hard-reset', async () => {
-        console.log('Main: Received hard-reset request. Clearing all storage data...');
+        // console.log('Main: Received hard-reset request. Clearing all storage data...');
         try {
             await session.defaultSession.clearStorageData({
                 storages: ['appcache', 'cookies', 'filesystem', 'indexdb', 'localstorage', 'shadercache', 'websql', 'serviceworkers', 'cachestorage']
             });
-            console.log('Main: Storage data cleared.');
+            // console.log('Main: Storage data cleared.');
             app.relaunch();
             app.quit();
         } catch (err) {
@@ -114,7 +114,7 @@ function createWindow() {
                         }
                     } else if (params.srcURL && params.srcURL.startsWith('data:image')) {
                         // RESTORED: Handle Data URIs explicitly (Robust for Google Images)
-                        console.log('Copying Data URI Image directly...');
+                        // console.log('Copying Data URI Image directly...');
                         try {
                             const image = nativeImage.createFromDataURL(params.srcURL);
                             clipboard.writeImage(image);
@@ -124,7 +124,7 @@ function createWindow() {
                         }
                     } else {
                         // Fallback for Blob URLs / other
-                        console.log('Fallback to copyImageAt (Blob/Other)');
+                        // console.log('Fallback to copyImageAt (Blob/Other)');
                         wc.copyImageAt(params.x, params.y);
                     }
                 }
@@ -162,14 +162,14 @@ function createWindow() {
     // IPC Context Menu (For Webviews)
     ipcMain.handle('show-context-menu', (event, params) => {
         const guestId = params.webContentsId;
-        console.log(`IPC: show-context-menu received. params.mediaType=${params.mediaType}, srcURL=${params.srcURL ? 'YES' : 'NO'}, guestId=${guestId}`);
+        // console.log(`IPC: show-context-menu received...`);
 
         const guestContents = guestId ? webContents.fromId(guestId) : null;
 
         if (guestContents && !guestContents.isDestroyed()) {
             createContextMenu(params, guestContents);
         } else {
-            console.warn(`Could not find guest webContents for guestId: ${guestId}. Falling back to main window.`);
+            // console.warn(`Could not find guest webContents for guestId: ${guestId}. Falling back to main window.`);
             // Fallback to main window (better than nothing)
             createContextMenu(params, win.webContents);
         }
@@ -195,7 +195,7 @@ function createWindow() {
 
     // Handle PDF Export
     ipcMain.handle('print-to-pdf', async (event, title, customHtml) => {
-        console.log('Main: Generating PDF for', title);
+        // console.log('Main: Generating PDF for', title);
         const printWin = new BrowserWindow({
             show: false,
             webPreferences: {
@@ -251,7 +251,7 @@ function createWindow() {
 
             if (filePath) {
                 await import('fs').then(fs => fs.promises.writeFile(filePath, pdfData));
-                console.log('Main: PDF Content written to', filePath);
+                // console.log('Main: PDF Content written to', filePath);
                 return { success: true, filePath };
             }
             return { success: false };
