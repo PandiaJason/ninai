@@ -17,13 +17,15 @@
 
   /* Colors - Defined by User Request */
   --bg-app: #ffffff;
-  --bg-sidebar: #f5f5f7;
-  /* Very light gray to distinguish sidebar */
+  --bg-sidebar: #ffffff;
+  /* User request: Entire app white/black */
   --bg-panel: rgba(255, 255, 255, 0.98);
 
   --surface-low: #ffffff;
-  --surface-mid: #f2f2f5;
-  --surface-high: #e5e5ea;
+  --surface-mid: #f5f5f5;
+  /* Neutral Gray */
+  --surface-high: #e5e5e5;
+  /* Neutral Gray */
 
   /* Text - High Contrast */
   --text-primary: #000000;
@@ -31,16 +33,17 @@
   --text-tertiary: #999999;
 
   /* Accents - User Palette */
+  /* Accents - User Palette */
   --accent-primary: #0071e3;
   /* Blue */
-  --accent-success: #ccff00;
-  /* Green (Lime from img) */
-  --accent-warning: #ffcc00;
-  /* Yellow - keeping for warning */
+  --accent-success: #0071e3;
+  /* Blue (Replaced Lime) */
+  --accent-warning: #ff3b30;
+  /* Red (Substituting Yellow) */
   --accent-danger: #ff3b30;
   /* Red */
 
-  --color-green: #ccff00;
+  --color-green: #0071e3;
   /* Direct reference */
   --color-blue: #0071e3;
   --color-red: #ff3b30;

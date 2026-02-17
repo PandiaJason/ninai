@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useEditor, EditorContent, wrappingInputRule } from '@tiptap/react';
+import { useEditor, EditorContent, wrappingInputRule, Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import Image from '@tiptap/extension-image';
@@ -35,18 +35,17 @@ interface NotesPanelProps {
 export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggleZenMode, onImportFromWebview }) => {
 
     // Internal Component for Export Button with Feedback
-    const ExportButton = ({ editor }: { editor: any }) => {
+    const ExportButton = ({ editor }: { editor: Editor | null }) => {
         const [status, setStatus] = useState<'idle' | 'copied'>('idle');
 
         const handleExport = async () => {
-            // console.log('Export button clicked');
             if (!editor) return;
             const md = exportToMarkdown(editor);
 
             try {
-                // @ts-ignore
+
                 if (window.electronAPI?.clipboard) {
-                    // @ts-ignore
+
                     window.electronAPI.clipboard.writeText(md);
                 } else {
                     await navigator.clipboard.writeText(md);
@@ -65,7 +64,6 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
             const md = exportToMarkdown(editor);
             e.dataTransfer.setData('text/plain', md);
             e.dataTransfer.effectAllowed = 'copy';
-            // console.log("Drag started with content length:", md.length);
         };
 
         return (
@@ -76,7 +74,7 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                 onClick={handleExport}
                 title="Copy Context for AI (Click or Drag to LLM)"
                 style={{
-                    color: status === 'copied' ? '#10b981' : '#3b82f6', // Blue 500
+                    color: status === 'copied' ? '#10b981' : '#0071e3', // Apple Blue
                     transition: 'all 0.2s',
                     cursor: 'grab'
                 }}
@@ -184,7 +182,7 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
 
     useEffect(() => {
         if (!panelRef.current) return;
-        // @ts-ignore
+
         if (!window.electronAPI) {
             console.error("FATAL: electronAPI missing.");
             if (process.env.NODE_ENV === 'development') {
@@ -815,41 +813,46 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                 {showList && (
                     <div className="notes-scroller">
                         {(() => {
-                            const now = new Date();
-                            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                            const yesterday = new Date(today);
-                            yesterday.setDate(yesterday.getDate() - 1);
-                            const last7Days = new Date(today);
-                            last7Days.setDate(last7Days.getDate() - 7);
-                            const last30Days = new Date(today);
-                            last30Days.setDate(last30Days.getDate() - 30);
+                            // OPTIMIZATION: Memoize grouping to avoid re-calc on every render
+                            const groupedNotes = React.useMemo(() => {
+                                const now = new Date();
+                                const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                                const yesterday = new Date(today);
+                                yesterday.setDate(yesterday.getDate() - 1);
+                                const last7Days = new Date(today);
+                                last7Days.setDate(last7Days.getDate() - 7);
+                                const last30Days = new Date(today);
+                                last30Days.setDate(last30Days.getDate() - 30);
 
-                            const groups: { [key: string]: typeof displayNotes } = {};
-                            const groupOrder: string[] = [];
+                                const groups: { [key: string]: typeof displayNotes } = {};
+                                const groupOrder: string[] = [];
 
-                            displayNotes.forEach(note => {
-                                const noteDate = new Date(note.updatedAt);
-                                const dateOnly = new Date(noteDate.getFullYear(), noteDate.getMonth(), noteDate.getDate());
+                                displayNotes.forEach(note => {
+                                    const noteDate = new Date(note.updatedAt);
+                                    const dateOnly = new Date(noteDate.getFullYear(), noteDate.getMonth(), noteDate.getDate());
 
-                                let groupName = '';
-                                if (dateOnly.getTime() === today.getTime()) {
-                                    groupName = 'Today';
-                                } else if (dateOnly.getTime() === yesterday.getTime()) {
-                                    groupName = 'Yesterday';
-                                } else if (dateOnly > last7Days) {
-                                    groupName = 'Previous 7 Days';
-                                } else if (dateOnly > last30Days) {
-                                    groupName = 'Previous 30 Days';
-                                } else {
-                                    groupName = noteDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-                                }
+                                    let groupName = '';
+                                    if (dateOnly.getTime() === today.getTime()) {
+                                        groupName = 'Today';
+                                    } else if (dateOnly.getTime() === yesterday.getTime()) {
+                                        groupName = 'Yesterday';
+                                    } else if (dateOnly > last7Days) {
+                                        groupName = 'Previous 7 Days';
+                                    } else if (dateOnly > last30Days) {
+                                        groupName = 'Previous 30 Days';
+                                    } else {
+                                        groupName = noteDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                                    }
 
-                                if (!groups[groupName]) {
-                                    groups[groupName] = [];
-                                    groupOrder.push(groupName);
-                                }
-                                groups[groupName].push(note);
-                            });
+                                    if (!groups[groupName]) {
+                                        groups[groupName] = [];
+                                        groupOrder.push(groupName);
+                                    }
+                                    groups[groupName].push(note);
+                                });
+
+                                return { groups, groupOrder };
+                            }, [displayNotes]);
 
                             if (displayNotes.length === 0) {
                                 return (
@@ -859,10 +862,10 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                                 );
                             }
 
-                            return groupOrder.map(group => (
+                            return groupedNotes.groupOrder.map(group => (
                                 <div key={group} className="notes-group">
                                     <h5 className="notes-group-header">{group}</h5>
-                                    {groups[group].map(note => (
+                                    {groupedNotes.groups[group].map(note => (
                                         <NotePreviewCard
                                             key={note.id}
                                             note={note}
@@ -942,9 +945,9 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                                                 const title = activeNote.title || 'Untitled';
                                                 const html = editor.getHTML();
                                                 try {
-                                                    // @ts-expect-error Electron API
+
                                                     if (window.electronAPI && window.electronAPI.printToPDF) {
-                                                        // @ts-expect-error Electron API
+
                                                         await window.electronAPI.printToPDF(title, html);
                                                     } else {
                                                         alert("PDF Export is only available in the Desktop app.");
@@ -1108,7 +1111,7 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                                                         <div key={r.id} className="reminder-existing-item">
                                                             <span
                                                                 className="home-priority-dot"
-                                                                style={{ background: r.priority === 'high' ? '#ef4444' : r.priority === 'medium' ? '#f59e0b' : '#3b82f6' }}
+                                                                style={{ background: r.priority === 'high' ? '#ff3b30' : r.priority === 'medium' ? '#000000' : '#0071e3' }}
                                                             />
                                                             <span className="reminder-existing-text">{r.text || 'Untitled'}</span>
                                                             {r.repeat && <span className="reminder-repeat-badge">🔁 {r.repeat}</span>}
@@ -1192,12 +1195,13 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                                                             key={p}
                                                             className={`reminder-pri-btn ${reminderPriority === p ? 'selected' : ''}`}
                                                             style={{
-                                                                borderColor: reminderPriority === p
-                                                                    ? (p === 'high' ? '#ef4444' : p === 'medium' ? '#f59e0b' : '#3b82f6')
+                                                                background: reminderPriority === p
+                                                                    ? (p === 'high' ? '#ff3b30' : p === 'medium' ? '#000000' : '#0071e3')
                                                                     : undefined,
                                                                 color: reminderPriority === p
-                                                                    ? (p === 'high' ? '#ef4444' : p === 'medium' ? '#f59e0b' : '#3b82f6')
-                                                                    : undefined
+                                                                    ? '#ffffff'
+                                                                    : undefined,
+                                                                borderColor: reminderPriority === p ? 'transparent' : undefined
                                                             }}
                                                             onClick={() => setReminderPriority(p)}
                                                         >
@@ -1312,7 +1316,6 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
 
 // Helper for Smart Paste Logic (Reuse for Clipboard + Drop)
 const processSmartPaste = (editor: any, content: { text: string, html: string }) => {
-    // console.log("Smart Paste: RAW", content);
     if ((!content.text || content.text.trim() === '') && (!content.html || content.html.trim() === '')) return;
 
     // HELPER: Recursive Decoder
@@ -1395,18 +1398,16 @@ const processSmartPaste = (editor: any, content: { text: string, html: string })
                 insertMarkdown(editor, candidate);
             }
         } catch (e) {
-            console.warn("Smart Paste: Markdown parse error, fallback to marked:", e);
             insertMarkdown(editor, candidate);
         }
     }
 };
 
 // Internal Component for ImportButton
-const ImportButton = ({ editor, onImportFromWebview }: { editor: any, onImportFromWebview?: () => Promise<{ text: string, html: string } | null> }) => {
+const ImportButton = ({ editor, onImportFromWebview }: { editor: Editor | null, onImportFromWebview?: () => Promise<{ text: string, html: string } | null> }) => {
     const [status, setStatus] = useState<'idle' | 'pasted' | 'dropping'>('idle');
 
     const handleImport = async () => {
-        // console.log('Import button clicked');
         if (!editor) return;
 
         try {
@@ -1415,10 +1416,8 @@ const ImportButton = ({ editor, onImportFromWebview }: { editor: any, onImportFr
 
             // 1. Try to get content from Active Webview first (if available)
             if (onImportFromWebview) {
-                console.log("Attempting to import from webview...");
                 const webviewContent = await onImportFromWebview();
                 if (webviewContent && (webviewContent.text || webviewContent.html)) {
-                    // console.log("Imported from webview:", { textLen: webviewContent.text?.length });
                     content = webviewContent;
                     importedFromWebview = true;
                 }
@@ -1426,9 +1425,9 @@ const ImportButton = ({ editor, onImportFromWebview }: { editor: any, onImportFr
 
             // 2. Fallback to Clipboard if no webview content
             if (!importedFromWebview) {
-                // @ts-ignore
+
                 if (window.electronAPI?.clipboard?.readExtended) {
-                    // @ts-ignore
+
                     const data = await window.electronAPI.clipboard.readExtended();
                     content = { text: data.text, html: data.html };
                 } else {

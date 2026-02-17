@@ -137,12 +137,16 @@
     border-radius: var(--radius-md);
     margin-bottom: 4px;
     cursor: pointer;
-    background: transparent;
+    background: #ffffff;
+    /* White Card */
     transition: all 0.1s ease;
+    border: 1px solid #e5e5e5;
+    /* Light Gray Border */
 }
 
 .note-preview-card:hover {
-    background: var(--bg-sidebar);
+    background: #f9f9f9;
+    /* Subtle Hover */
 }
 
 .note-preview-card.active {
@@ -321,7 +325,8 @@
     margin-right: 6px;
     display: flex;
     align-items: center;
-    color: var(--text-secondary);
+    color: var(--accent-primary);
+    /* Blue Icons */
 }
 
 .folder-name {
@@ -933,17 +938,20 @@ li[data-type="taskItem"] p {
     position: relative;
     display: flex;
     align-items: center;
-    background: rgba(0, 0, 0, 0.05);
+    background: #ffffff;
+    /* White Background */
+    border: 1px solid #e5e5e5;
+    /* Light Gray Border */
     border-radius: 8px;
     padding: 2px 8px;
-    transition: background 0.1s;
+    transition: all 0.1s ease;
 }
 
 .search-wrapper:focus-within {
-    background: white;
-    box-shadow: 0 0 0 2px rgba(66, 133, 244, 0.3);
-    /* Subtle focus ring */
-    /* border: 1px solid var(--accent-primary); */
+    background: #ffffff;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px rgba(0, 113, 227, 0.1);
+    /* Blue Focus Ring */
 }
 
 .search-icon {
@@ -1189,11 +1197,15 @@ li[data-type="taskItem"]:focus-within {
     border-radius: 8px;
     cursor: pointer;
     transition: background 0.1s;
-    background: rgba(0, 0, 0, 0.02);
+    background: #ffffff;
+    /* White Card */
+    border: 1px solid #e5e5e5;
+    /* Light Gray Border */
 }
 
 .home-task-item:hover {
-    background: rgba(0, 0, 0, 0.05);
+    background: #f9f9f9;
+    /* Subtle Hover */
 }
 
 .home-task-content {
@@ -1285,21 +1297,31 @@ li[data-type="taskItem"]:focus-within {
 }
 
 .home-loved-card {
-    background: var(--surface-low, #fafafa);
-    border: 1px solid var(--border-subtle, #e5e7eb);
+    background: #ffffff;
+    /* White Card */
     border-radius: 12px;
-    padding: 14px 16px;
-    cursor: pointer;
-    transition: all 0.2s ease;
+    padding: 16px;
+    height: 140px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    justify-content: space-between;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+    box-shadow: none;
+    /* Flat look for filled box? Or keep shadow? User image looked flat */
+    border: 1px solid #e5e5e5;
+    /* Light Gray Border */
+    position: relative;
+    overflow: hidden;
 }
 
 .home-loved-card:hover {
     transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(255, 59, 48, 0.15);
-    border-color: rgba(255, 59, 48, 0.3);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+    background: #f9f9f9;
+    /* Subtle Hover */
+    border-color: #d4d4d4;
+    /* Slightly Darker Border on Hover */
 }
 
 .home-loved-card-title {
@@ -1532,8 +1554,9 @@ li[data-type="taskItem"]:focus-within {
 .reminder-repeat-badge,
 .home-repeat-badge {
     font-size: 0.6rem;
-    background: rgba(168, 85, 247, 0.1);
-    color: #a855f7;
+    background: rgba(0, 113, 227, 0.1);
+    /* Blue-500 var(--accent-glow) */
+    color: var(--accent-primary);
     padding: 1px 6px;
     border-radius: 8px;
     white-space: nowrap;
@@ -1611,7 +1634,7 @@ li[data-type="taskItem"]:focus-within {
 
 /* ===== Completed Tasks ===== */
 .home-group-label.completed-label {
-    color: var(--color-green);
+    color: #000000;
     text-shadow: 0 0 1px rgba(0, 0, 0, 0.1);
 }
 

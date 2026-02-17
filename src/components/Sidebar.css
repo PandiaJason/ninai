@@ -36,7 +36,8 @@
     border: 1px solid var(--border-subtle);
     /* Defines edge in light mode */
     background: var(--surface-low);
-    color: var(--text-secondary);
+    color: var(--accent-primary);
+    /* Blue Icons */
     font-weight: 600;
     font-size: 1rem;
     cursor: pointer;
