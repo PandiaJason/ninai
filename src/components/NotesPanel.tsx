@@ -97,24 +97,56 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
     }, []);
 
 
+    // --- State (Defined FIRST for queries) ---
+    const [searchTerm, setSearchTerm] = useState('');
+    const [activeFolderId, setActiveFolderId] = useState<string>('ninai');
+    const [activeNoteId, setActiveNoteId] = useState<string | null>(() => localStorage.getItem('ninai_active_note'));
+    const titleInputRef = useRef<HTMLInputElement>(null); // Ref for title input
+    const [shouldFocusTitle, setShouldFocusTitle] = useState(false); // Flag for new note creation
+
     // --- Live Data ---
     const folders = useLiveQuery(async () => {
         const all = await db.folders.toArray();
         return all.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     }) || [];
-    const notes = useLiveQuery(() => db.notes.orderBy('updatedAt').reverse().toArray()) || [];
 
-    const [activeFolderId, setActiveFolderId] = useState<string>('ninai');
-    const [activeNoteId, setActiveNoteId] = useState<string | null>(() => localStorage.getItem('ninai_active_note'));
-    const titleInputRef = useRef<HTMLInputElement>(null); // Ref for title input
-    const [shouldFocusTitle, setShouldFocusTitle] = useState(false); // Flag for new note creation
+    const notes = useLiveQuery(async () => {
+        // PERF: Search handling at DB level
+        if (searchTerm) {
+            // Simple case-insensitive search on Title and Content (limited to 50 for speed)
+            const lowerTerm = searchTerm.toLowerCase();
+            return db.notes.filter(n =>
+                n.title.toLowerCase().includes(lowerTerm) ||
+                n.content.toLowerCase().includes(lowerTerm)
+            ).limit(50).toArray();
+        }
+
+        // PERF: Only query what is needed based on active folder
+        if (activeFolderId === 'all') {
+            // Cap 'All Notes' to 100 most recent for performance
+            // Users can search to find older notes
+            return db.notes.orderBy('updatedAt').reverse().limit(100).toArray();
+        } else {
+            // Filter by folder using Index
+            // Note: Dexie returns a Collection, we need to sort it
+            return db.notes.where('folderId').equals(activeFolderId).reverse().sortBy('updatedAt');
+        }
+    }, [activeFolderId, searchTerm]) || [];
+
+    // PERF: Fetch active note independently!
+    // This ensures that even if the note isn't in the "Top 100" list, we can still see/edit it.
+    const activeNoteQuery = useLiveQuery(async () => {
+        if (!activeNoteId) return undefined;
+        return db.notes.get(activeNoteId);
+    }, [activeNoteId]);
+
+    const activeNote = activeNoteQuery;
 
     useEffect(() => {
         if (activeNoteId) localStorage.setItem('ninai_active_note', activeNoteId);
     }, [activeNoteId]);
 
     // --- Logic ---
-    const [searchTerm, setSearchTerm] = useState('');
     const [showFolders, setShowFolders] = useState(true);
     const [showList, setShowList] = useState(true);
     const [showEditor, setShowEditor] = useState(true);
@@ -230,22 +262,9 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
         f.name.toLowerCase().includes(searchTerm.toLowerCase())
     ), [folders, searchTerm]);
 
-    const filteredNotes = React.useMemo(() => activeFolderId === 'all'
-        ? notes
-        : notes.filter(n => n.folderId === activeFolderId), [activeFolderId, notes]);
+    // const activeNote = React.useMemo(() => notes.find(n => n.id === activeNoteId), [notes, activeNoteId]);
 
-    const searchResults = React.useMemo(() => searchTerm
-        ? notes.filter(n =>
-            n.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            n.content.toLowerCase().includes(searchTerm.toLowerCase())
-        )
-        : filteredFolders.length > 0 ? filteredNotes : [], [searchTerm, notes, filteredFolders.length, filteredNotes]);
-
-    const displayNotes = React.useMemo(() => searchTerm
-        ? searchResults
-        : filteredNotes, [searchTerm, searchResults, filteredNotes]);
-
-    const activeNote = React.useMemo(() => notes.find(n => n.id === activeNoteId), [notes, activeNoteId]);
+    // const activeNote = React.useMemo(() => notes.find(n => n.id === activeNoteId), [notes, activeNoteId]);
 
     // --- TipTap Editor Setup ---
     const [isDirty, setIsDirty] = useState(false);
@@ -265,7 +284,7 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
     const debouncedUpdateNote = useDebounce(async (id: string, updates: Partial<Note>) => {
         await db.notes.update(id, { ...updates, updatedAt: new Date() });
         setIsDirty(false); // Saved
-    }, 500);
+    }, 1500);
 
     const updateNote = (field: 'title' | 'content', value: string) => {
         if (!activeNoteId) return;
@@ -824,10 +843,10 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                                 const last30Days = new Date(today);
                                 last30Days.setDate(last30Days.getDate() - 30);
 
-                                const groups: { [key: string]: typeof displayNotes } = {};
+                                const groups: { [key: string]: typeof notes } = {};
                                 const groupOrder: string[] = [];
 
-                                displayNotes.forEach(note => {
+                                notes.forEach(note => {
                                     const noteDate = new Date(note.updatedAt);
                                     const dateOnly = new Date(noteDate.getFullYear(), noteDate.getMonth(), noteDate.getDate());
 
@@ -852,9 +871,9 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                                 });
 
                                 return { groups, groupOrder };
-                            }, [displayNotes]);
+                            }, [notes]);
 
-                            if (displayNotes.length === 0) {
+                            if (notes.length === 0) {
                                 return (
                                     <div className="empty-state" style={{ padding: '40px 20px', textAlign: 'center', opacity: 0.5 }}>
                                         No notes found

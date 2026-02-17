@@ -116,6 +116,9 @@ export class NinaiDB extends Dexie {
 
     // Helper to populate from localStorage if empty
     async populateFromLocalStorage() {
+        // Fast skip if already migrated
+        if (localStorage.getItem('ninai_migration_v1')) return;
+
         try {
             if (!this.isOpen()) await this.open();
             const hasNotes = await this.notes.count() > 0;
@@ -164,6 +167,8 @@ export class NinaiDB extends Dexie {
 
                 // Optional: Clear localStorage after successful migration? 
                 // Keeping it for safety for now.
+                // SUCCESS: Mark migration complete to avoid re-checking every boot
+                localStorage.setItem('ninai_migration_v1', 'true');
             }
         } catch (error) {
             console.error("Database populate error:", error);
