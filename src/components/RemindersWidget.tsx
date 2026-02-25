@@ -342,7 +342,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({ onSelectNote }) =>
                         <div className="home-loved-grid">
                             {lovedNotes.map(note => {
                                 // Strip HTML to get a plain-text preview
-                                const plainText = note.content
+                                const plainText = (note.content || '')
                                     .replace(/<[^>]+>/g, ' ')
                                     .replace(/\s+/g, ' ')
                                     .trim();

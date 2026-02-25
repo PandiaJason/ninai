@@ -21,10 +21,39 @@ import { db } from '../db';
 import type { Note, NoteReminder, RepeatOption } from '../db';
 import './NotesPanel.css';
 import { FolderList } from './FolderList';
-import { exportToMarkdown, insertMarkdown } from '../services/llm';
+import { insertMarkdown } from '../services/llm';
 import { NotePreviewCard } from './NotePreviewCard';
 import { useDebounce } from '../hooks/useDebounce';
 import { HomeDashboard } from './RemindersWidget';
+import { ExportButton } from './ExportButton';
+
+// Error Boundary Component
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
+    constructor(props: { children: React.ReactNode }) {
+        super(props);
+        this.state = { hasError: false };
+    }
+
+    static getDerivedStateFromError(_error: any) {
+        return { hasError: true };
+    }
+
+    componentDidCatch(error: any, errorInfo: any) {
+        console.error("NotesPanel Crash:", error, errorInfo);
+    }
+
+    render() {
+        if (this.state.hasError) {
+            return (
+                <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-primary)' }}>
+                    <h3>Something went wrong.</h3>
+                    <button onClick={() => this.setState({ hasError: false })} className="btn-primary">Try Again</button>
+                </div>
+            );
+        }
+        return this.props.children;
+    }
+}
 
 interface NotesPanelProps {
     zenMode?: boolean;
@@ -33,63 +62,14 @@ interface NotesPanelProps {
 }
 
 export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggleZenMode, onImportFromWebview }) => {
+    return (
+        <ErrorBoundary>
+            <NotesPanelContent zenMode={zenMode} onToggleZenMode={onToggleZenMode} onImportFromWebview={onImportFromWebview} />
+        </ErrorBoundary>
+    );
+};
 
-    // Internal Component for Export Button with Feedback
-    const ExportButton = ({ editor }: { editor: Editor | null }) => {
-        const [status, setStatus] = useState<'idle' | 'copied'>('idle');
-
-        const handleExport = async () => {
-            if (!editor) return;
-            const md = exportToMarkdown(editor);
-
-            try {
-
-                if (window.electronAPI?.clipboard) {
-
-                    window.electronAPI.clipboard.writeText(md);
-                } else {
-                    await navigator.clipboard.writeText(md);
-                }
-
-                setStatus('copied');
-                setTimeout(() => setStatus('idle'), 2000);
-            } catch (err) {
-                console.error('Export failed:', err);
-                alert(`Failed to copy: ${err}`);
-            }
-        };
-
-        const handleDragStart = (e: React.DragEvent) => {
-            if (!editor) return;
-            const md = exportToMarkdown(editor);
-            e.dataTransfer.setData('text/plain', md);
-            e.dataTransfer.effectAllowed = 'copy';
-        };
-
-        return (
-            <button
-                className="icon-btn-ghost"
-                draggable
-                onDragStart={handleDragStart}
-                onClick={handleExport}
-                title="Copy Context for AI (Click or Drag to LLM)"
-                style={{
-                    color: status === 'copied' ? '#10b981' : '#0071e3', // Apple Blue
-                    transition: 'all 0.2s',
-                    cursor: 'grab'
-                }}
-            >
-                {status === 'copied' ? (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                ) : (
-                    // Sparkles Icon (Abstract "AI Context")
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z" />
-                    </svg>
-                )}
-            </button>
-        );
-    };
+const NotesPanelContent: React.FC<NotesPanelProps> = ({ zenMode, onToggleZenMode, onImportFromWebview }) => {
 
     // --- DB Migration on Mount ---
     useEffect(() => {
@@ -521,8 +501,8 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
     useEffect(() => {
         if (!editor || !activeNote) return;
         if (activeNote.id !== previousNoteIdRef.current) {
-            setLocalTitle(activeNote.title);
-            editor.commands.setContent(activeNote.content, { emitUpdate: false });
+            setLocalTitle(activeNote.title || '');
+            editor.commands.setContent(activeNote.content || '', { emitUpdate: false });
             previousNoteIdRef.current = activeNote.id;
 
             // Handle Auto-Focus Title Logic
@@ -715,7 +695,49 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
             else counts[n.folderId] = 1;
         });
         return counts;
+        return counts;
     }, [notes, folders]);
+
+    // OPTIMIZATION: Memoize grouping (Moved to top level)
+    const groupedNotes = React.useMemo(() => {
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const last7Days = new Date(today);
+        last7Days.setDate(last7Days.getDate() - 7);
+        const last30Days = new Date(today);
+        last30Days.setDate(last30Days.getDate() - 30);
+
+        const groups: { [key: string]: typeof notes } = {};
+        const groupOrder: string[] = [];
+
+        notes.forEach(note => {
+            const noteDate = new Date(note.updatedAt);
+            const dateOnly = new Date(noteDate.getFullYear(), noteDate.getMonth(), noteDate.getDate());
+
+            let groupName = '';
+            if (dateOnly.getTime() === today.getTime()) {
+                groupName = 'Today';
+            } else if (dateOnly.getTime() === yesterday.getTime()) {
+                groupName = 'Yesterday';
+            } else if (dateOnly > last7Days) {
+                groupName = 'Previous 7 Days';
+            } else if (dateOnly > last30Days) {
+                groupName = 'Previous 30 Days';
+            } else {
+                groupName = noteDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            }
+
+            if (!groups[groupName]) {
+                groups[groupName] = [];
+                groupOrder.push(groupName);
+            }
+            groups[groupName].push(note);
+        });
+
+        return { groups, groupOrder };
+    }, [notes]);
 
     return (
         <div className="notes-panel" ref={panelRef}>
@@ -831,71 +853,25 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
                 )}
                 {showList && (
                     <div className="notes-scroller">
-                        {(() => {
-                            // OPTIMIZATION: Memoize grouping to avoid re-calc on every render
-                            const groupedNotes = React.useMemo(() => {
-                                const now = new Date();
-                                const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                                const yesterday = new Date(today);
-                                yesterday.setDate(yesterday.getDate() - 1);
-                                const last7Days = new Date(today);
-                                last7Days.setDate(last7Days.getDate() - 7);
-                                const last30Days = new Date(today);
-                                last30Days.setDate(last30Days.getDate() - 30);
-
-                                const groups: { [key: string]: typeof notes } = {};
-                                const groupOrder: string[] = [];
-
-                                notes.forEach(note => {
-                                    const noteDate = new Date(note.updatedAt);
-                                    const dateOnly = new Date(noteDate.getFullYear(), noteDate.getMonth(), noteDate.getDate());
-
-                                    let groupName = '';
-                                    if (dateOnly.getTime() === today.getTime()) {
-                                        groupName = 'Today';
-                                    } else if (dateOnly.getTime() === yesterday.getTime()) {
-                                        groupName = 'Yesterday';
-                                    } else if (dateOnly > last7Days) {
-                                        groupName = 'Previous 7 Days';
-                                    } else if (dateOnly > last30Days) {
-                                        groupName = 'Previous 30 Days';
-                                    } else {
-                                        groupName = noteDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-                                    }
-
-                                    if (!groups[groupName]) {
-                                        groups[groupName] = [];
-                                        groupOrder.push(groupName);
-                                    }
-                                    groups[groupName].push(note);
-                                });
-
-                                return { groups, groupOrder };
-                            }, [notes]);
-
-                            if (notes.length === 0) {
-                                return (
-                                    <div className="empty-state" style={{ padding: '40px 20px', textAlign: 'center', opacity: 0.5 }}>
-                                        No notes found
-                                    </div>
-                                );
-                            }
-
-                            return groupedNotes.groupOrder.map(group => (
-                                <div key={group} className="notes-group">
-                                    <h5 className="notes-group-header">{group}</h5>
-                                    {groupedNotes.groups[group].map(note => (
-                                        <NotePreviewCard
-                                            key={note.id}
-                                            note={note}
-                                            isActive={activeNoteId === note.id}
-                                            onSelect={handleNoteClick}
-                                            onContextMenu={handleNoteContextMenu}
-                                        />
-                                    ))}
-                                </div>
-                            ));
-                        })()}
+                        {groupedNotes.groupOrder.map(group => (
+                            <div key={group} className="notes-group">
+                                <div className="notes-group-header">{group}</div>
+                                {groupedNotes.groups[group].map(note => (
+                                    <NotePreviewCard
+                                        key={note.id}
+                                        note={note}
+                                        isActive={activeNoteId === note.id}
+                                        onSelect={handleNoteClick}
+                                        onContextMenu={handleNoteContextMenu}
+                                    />
+                                ))}
+                            </div>
+                        ))}
+                        {notes.length === 0 && (
+                            <div className="empty-list-state">
+                                <p>No notes found</p>
+                            </div>
+                        )}
                     </div>
                 )}
                 {noteMenu && (
@@ -1332,6 +1308,7 @@ export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggl
         </div >
     );
 };
+
 
 // Helper for Smart Paste Logic (Reuse for Clipboard + Drop)
 const processSmartPaste = (editor: any, content: { text: string, html: string }) => {

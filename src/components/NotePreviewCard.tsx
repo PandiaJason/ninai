@@ -28,7 +28,7 @@ export const NotePreviewCard = React.memo(({ note, isActive, onSelect, onContext
             <h4 className="note-preview-title">{note.title || 'New Note'}</h4>
             <div className="note-preview-meta">
                 <span className="note-time">
-                    {note.updatedAt.toLocaleDateString([], { month: 'numeric', day: 'numeric' })}
+                    {new Date(note.updatedAt).toLocaleDateString([], { month: 'numeric', day: 'numeric' })}
                 </span>
                 <p className="note-preview-text">
                     {textPreview}
