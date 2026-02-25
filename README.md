@@ -76,6 +76,27 @@ NINAI places your AI tools and your notes **side-by-side in a single window**. U
 
 ---
 
+## Technical Architecture
+
+NINAI employs a modern desktop architecture designed for speed, local privacy, and deep native integration.
+
+### High-Level Data Flow
+1.  **Webviews (`<webview>`)**: Isolate third-party LLM web apps (ChatGPT, Claude) within their own processes. This sandboxing ensures stability and security while allowing DOM interception.
+2.  **Renderer Process (React/Vite)**: Manages the split-pane UI, TipTap editor state, and user interactions. State caching is aggressive to ensure UI transitions (like Zen Mode) are instantaneous without Rules of Hooks violations.
+3.  **Main Process (Node.js)**: Handles system-level permissions, file system access (PDF Export), native context menus, and network interception.
+
+### Inter-Process Communication (IPC)
+Because Webviews and the React UI run in isolated contexts, they communicate through the Main process via secure Context Bridges (`preload.js`).
+-   **Context Menus**: Right-clicks inside a webview trigger generic IPC messages to the Main process, which dynamically builds a native OS menu complete with Spellcheck and standard editing actions.
+-   **Storage Overrides**: The Main process intercepts network requests to strip `X-Frame-Options` and `CSP` headers, enabling embedding of highly secure domains.
+
+### Local Database (Dexie/IndexedDB)
+Notes, folders, and application settings are stored strictly client-side using IndexedDB.
+-   **Optimized Queries**: To prevent UI locking on large datasets (10k+ notes), active queries use Dexie's `.where()` indexing rather than loading arrays into memory.
+-   **Debounced Writes**: Editor changes (`src/hooks/useDebounce.ts`) are cached and flushed to disk on a delayed timer, preventing disk I/O thrashing during rapid typing.
+
+---
+
 ## Getting Started
 
 ### Prerequisites
