@@ -150,6 +150,13 @@
     border-left: none;
 }
 
+.layout-insight-panel.notes-fill {
+    flex: 1 1 auto;
+    width: auto !important;
+    min-width: 0;
+    border-left: 1px solid var(--border-subtle);
+}
+
 /* Right Sidebar Toggle (Notes/Editor) */
 .notes-toggle {
     position: absolute;

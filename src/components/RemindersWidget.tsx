@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../db';
-import type { NoteReminder, RepeatOption } from '../db';
+import { db, DEFAULT_WORKSPACE_ID, type NoteReminder, type RepeatOption } from '../db';
 
 interface HomeDashboardProps {
     onSelectNote: (noteId: string) => void;
+    workspaceId?: string;
 }
 
 const priorityColors: Record<string, string> = {
@@ -52,7 +52,7 @@ interface FlatReminder {
     noteTitle: string;
 }
 
-export const HomeDashboard: React.FC<HomeDashboardProps> = ({ onSelectNote }) => {
+export const HomeDashboard: React.FC<HomeDashboardProps> = ({ onSelectNote, workspaceId }) => {
     const [now, setNow] = useState(new Date());
     const firedRef = useRef<Set<string>>(new Set());
 
@@ -62,17 +62,22 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({ onSelectNote }) =>
         return () => clearInterval(timer);
     }, []);
 
+    const inWorkspace = (note: { workspaceId?: string; archived?: number }) =>
+        (!workspaceId || (note.workspaceId || DEFAULT_WORKSPACE_ID) === workspaceId) && note.archived !== 1;
+
     // Live query: all notes (we'll filter those with reminders)
     // Optimized queries
     // 1. Get notes with reminders
-    const reminderNotes = useLiveQuery(() =>
-        db.notes.where('hasReminders').equals(1).toArray()
-    ) || [];
+    const reminderNotes = useLiveQuery(async () => {
+        const notes = await db.notes.where('hasReminders').equals(1).toArray();
+        return notes.filter(inWorkspace);
+    }, [workspaceId]) || [];
 
     // 2. Get loved notes
-    const lovedNotes = useLiveQuery(() =>
-        db.notes.where('loved').equals(1).toArray()
-    ) || [];
+    const lovedNotes = useLiveQuery(async () => {
+        const notes = await db.notes.where('loved').equals(1).toArray();
+        return notes.filter(inWorkspace);
+    }, [workspaceId]) || [];
 
     // Combine for safety if needed, but for now treat independently
     // The auto-advance effect needs to check relevant notes
