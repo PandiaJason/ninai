@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { exportBackup } from '../utils/export';
 import { db } from '../db';
+import type { ModuleId } from '../types/workspace';
+import { Icon, type IconName } from './ui/Icon';
 import './Sidebar.css';
 
 interface SidebarProps {
@@ -9,9 +11,35 @@ interface SidebarProps {
     onSelectTool: (id: string) => void;
     onAddTool: (name: string, url: string) => void;
     onDeleteTool: (id: string) => void;
+    activeModule?: ModuleId;
+    onSelectModule?: (module: ModuleId) => void;
+    onOpenSearch?: () => void;
+    workspaceName?: string;
+    onSignOut?: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ tools, activeToolId, onSelectTool, onAddTool, onDeleteTool }) => {
+const MODULES: { id: ModuleId; label: string; icon: IconName }[] = [
+    { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
+    { id: 'crm', label: 'CRM', icon: 'crm' },
+    { id: 'tasks', label: 'Tasks', icon: 'tasks' },
+    { id: 'notes', label: 'Notes', icon: 'notes' },
+    { id: 'calendar', label: 'Calendar', icon: 'calendar' },
+    { id: 'settings', label: 'Settings', icon: 'settings' },
+    { id: 'tools', label: 'Browser', icon: 'globe' },
+];
+
+export const Sidebar: React.FC<SidebarProps> = ({
+    tools,
+    activeToolId,
+    onSelectTool,
+    onAddTool,
+    onDeleteTool,
+    activeModule = 'notes',
+    onSelectModule,
+    onOpenSearch,
+    workspaceName,
+    onSignOut,
+}) => {
     // --- User Profile State ---
     const [userName, setUserName] = useState(() => localStorage.getItem('ninai_username') || 'N');
     const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -31,7 +59,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ tools, activeToolId, onSelectT
     useEffect(() => {
         const closeMenu = () => {
             setContextMenu(null);
-            // Don't close profile menu on every click inside it, handled separately
         };
         window.addEventListener('click', closeMenu);
         return () => window.removeEventListener('click', closeMenu);
@@ -132,6 +159,33 @@ export const Sidebar: React.FC<SidebarProps> = ({ tools, activeToolId, onSelectT
 
                         <div className="divider" />
 
+                        {onSignOut && (
+                            <button
+                                className="menu-item"
+                                onClick={() => {
+                                    setShowProfileMenu(false);
+                                    onSignOut();
+                                }}
+                                style={{
+                                    width: '100%',
+                                    padding: '10px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '8px',
+                                    fontSize: '0.9rem',
+                                    color: 'var(--text-secondary)',
+                                    background: 'var(--surface-mid)',
+                                    border: '1px solid var(--border-subtle)',
+                                    borderRadius: '8px',
+                                    cursor: 'pointer',
+                                    fontWeight: 600
+                                }}
+                            >
+                                <Icon name="logout" size={16} /> Sign out
+                            </button>
+                        )}
+
                         <button
                             className="menu-item delete"
                             onClick={handleFactoryReset}
@@ -157,31 +211,55 @@ export const Sidebar: React.FC<SidebarProps> = ({ tools, activeToolId, onSelectT
                     </div>
                     <button className="close-link" onClick={() => setShowProfileMenu(false)}>Close</button>
                 </div>
-            )
-            }
+            )}
 
-            <div className="tools-list">
-                {tools.map((tool) => (
-                    <button
-                        key={tool.id}
-                        className={`tool-icon ${activeToolId === tool.id ? 'active' : ''}`}
-                        onClick={() => onSelectTool(tool.id)}
-                        onContextMenu={(e) => handleContextMenu(e, tool.id)}
-                        style={{ '--tool-color': tool.color } as React.CSSProperties}
-                        aria-label={`Switch to ${tool.name}`}
-                        title={tool.name}
-                    >
-                        {tool.label}
-                    </button>
-                ))}
+            <div className="sidebar-scroll">
+                {workspaceName && <div className="sidebar-workspace-chip" title={workspaceName}>{workspaceName}</div>}
 
-                <button
-                    className={`tool-icon add-btn ${isAdding ? 'active' : ''}`}
-                    onClick={() => setIsAdding(!isAdding)}
-                    title="Add Custom Site"
-                >
-                    +
+                <button className="sidebar-search-btn" onClick={onOpenSearch} title="Search workspace (Ctrl/⌘ K)" aria-label="Search workspace">
+                    <Icon name="search" size={17} />
                 </button>
+
+                <div className="sidebar-modules">
+                    {MODULES.map(module => (
+                        <button
+                            key={module.id}
+                            className={`nav-module-btn ${activeModule === module.id ? 'active' : ''}`}
+                            onClick={() => onSelectModule?.(module.id)}
+                            aria-label={module.label}
+                            aria-current={activeModule === module.id ? 'page' : undefined}
+                        >
+                            <Icon name={module.icon} size={18} />
+                            <span className="nav-module-tooltip">{module.label}</span>
+                        </button>
+                    ))}
+                </div>
+
+                <div className="sidebar-module-divider" />
+
+                <div className="tools-list">
+                    {tools.map((tool) => (
+                        <button
+                            key={tool.id}
+                            className={`tool-icon ${activeModule === 'tools' && activeToolId === tool.id ? 'active' : ''}`}
+                            onClick={() => onSelectTool(tool.id)}
+                            onContextMenu={(e) => handleContextMenu(e, tool.id)}
+                            style={{ '--tool-color': tool.color } as React.CSSProperties}
+                            aria-label={`Switch to ${tool.name}`}
+                            title={tool.name}
+                        >
+                            {tool.label}
+                        </button>
+                    ))}
+
+                    <button
+                        className={`tool-icon add-btn ${isAdding ? 'active' : ''}`}
+                        onClick={() => setIsAdding(!isAdding)}
+                        title="Add Custom Site"
+                    >
+                        +
+                    </button>
+                </div>
             </div>
 
             {/* Popover Form for Adding Tool */}

@@ -26,6 +26,10 @@ import { NotePreviewCard } from './NotePreviewCard';
 import { useDebounce } from '../hooks/useDebounce';
 import { HomeDashboard } from './RemindersWidget';
 import { ExportButton } from './ExportButton';
+import { archiveNote, createWorkspaceNote, deleteFolderCascade, deleteNoteCascade, ensureWorkspaceNotesFolder, folderBelongsToWorkspace, noteBelongsToWorkspace, toggleNoteFavorite } from '../services/notes';
+import { toErrorMessage } from '../services/errors';
+import { NoteAssociations } from './workspace/NoteAssociations';
+import { useToast } from './ui/Toast';
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
@@ -56,20 +60,41 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
 }
 
 interface NotesPanelProps {
+    workspaceId: string;
     zenMode?: boolean;
     onToggleZenMode?: () => void;
     onImportFromWebview?: () => Promise<{ text: string, html: string } | null>;
+    externalNoteId?: string | null;
+    onExternalNoteOpened?: () => void;
+    showZenToggle?: boolean;
 }
 
-export const NotesPanel: React.FC<NotesPanelProps> = ({ zenMode = false, onToggleZenMode, onImportFromWebview }) => {
+const VIRTUAL_FOLDERS = ['all', 'favorites', 'archived'] as const;
+
+const VIRTUAL_FOLDER_LABELS: Record<string, string> = {
+    all: 'All Notes',
+    favorites: 'Favourites',
+    archived: 'Archived',
+};
+
+export const NotesPanel: React.FC<NotesPanelProps> = ({ workspaceId, zenMode = false, onToggleZenMode, onImportFromWebview, externalNoteId, onExternalNoteOpened, showZenToggle = true }) => {
     return (
         <ErrorBoundary>
-            <NotesPanelContent zenMode={zenMode} onToggleZenMode={onToggleZenMode} onImportFromWebview={onImportFromWebview} />
+            <NotesPanelContent
+                workspaceId={workspaceId}
+                zenMode={zenMode}
+                onToggleZenMode={onToggleZenMode}
+                onImportFromWebview={onImportFromWebview}
+                externalNoteId={externalNoteId}
+                onExternalNoteOpened={onExternalNoteOpened}
+                showZenToggle={showZenToggle}
+            />
         </ErrorBoundary>
     );
 };
 
-const NotesPanelContent: React.FC<NotesPanelProps> = ({ zenMode, onToggleZenMode, onImportFromWebview }) => {
+const NotesPanelContent: React.FC<NotesPanelProps> = ({ workspaceId, zenMode, onToggleZenMode, onImportFromWebview, externalNoteId, onExternalNoteOpened, showZenToggle = true }) => {
+    const toast = useToast();
 
     // --- DB Migration on Mount ---
     useEffect(() => {
@@ -87,31 +112,54 @@ const NotesPanelContent: React.FC<NotesPanelProps> = ({ zenMode, onToggleZenMode
     // --- Live Data ---
     const folders = useLiveQuery(async () => {
         const all = await db.folders.toArray();
-        return all.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    }) || [];
+        return all
+            .filter(folder => folderBelongsToWorkspace(folder, workspaceId) && !VIRTUAL_FOLDERS.includes(folder.id as typeof VIRTUAL_FOLDERS[number]))
+            .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    }, [workspaceId]) || [];
 
     const notes = useLiveQuery(async () => {
+        const all = await db.notes
+            .where('workspaceId')
+            .equals(workspaceId)
+            .toArray();
+
         // PERF: Search handling at DB level
         if (searchTerm) {
-            // Simple case-insensitive search on Title and Content (limited to 50 for speed)
             const lowerTerm = searchTerm.toLowerCase();
-            return db.notes.filter(n =>
-                n.title.toLowerCase().includes(lowerTerm) ||
-                n.content.toLowerCase().includes(lowerTerm)
-            ).limit(50).toArray();
+            return all
+                .filter(n => activeFolderId === 'archived' ? n.archived === 1 : n.archived !== 1)
+                .filter(n =>
+                    n.title.toLowerCase().includes(lowerTerm) ||
+                    n.content.toLowerCase().includes(lowerTerm)
+                )
+                .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+                .slice(0, 50);
         }
 
-        // PERF: Only query what is needed based on active folder
         if (activeFolderId === 'all') {
-            // Cap 'All Notes' to 100 most recent for performance
-            // Users can search to find older notes
-            return db.notes.orderBy('updatedAt').reverse().limit(100).toArray();
-        } else {
-            // Filter by folder using Index
-            // Note: Dexie returns a Collection, we need to sort it
-            return db.notes.where('folderId').equals(activeFolderId).reverse().sortBy('updatedAt');
+            // Cap 'All Notes' to 100 most recent for performance.
+            return all
+                .filter(n => n.archived !== 1)
+                .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+                .slice(0, 100);
         }
-    }, [activeFolderId, searchTerm]) || [];
+
+        if (activeFolderId === 'favorites') {
+            return all
+                .filter(n => n.archived !== 1 && !!n.loved)
+                .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+        }
+
+        if (activeFolderId === 'archived') {
+            return all
+                .filter(n => n.archived === 1)
+                .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+        }
+
+        return all
+            .filter(n => n.folderId === activeFolderId && n.archived !== 1)
+            .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+    }, [activeFolderId, searchTerm, workspaceId]) || [];
 
     // PERF: Fetch active note independently!
     // This ensures that even if the note isn't in the "Top 100" list, we can still see/edit it.
@@ -125,6 +173,52 @@ const NotesPanelContent: React.FC<NotesPanelProps> = ({ zenMode, onToggleZenMode
     useEffect(() => {
         if (activeNoteId) localStorage.setItem('ninai_active_note', activeNoteId);
     }, [activeNoteId]);
+
+    // Make sure the workspace always has at least one real notes folder.
+    useEffect(() => {
+        ensureWorkspaceNotesFolder(workspaceId).catch(() => { /* handled by service permissions */ });
+    }, [workspaceId]);
+
+    // When switching workspaces, never keep a folder or note from the old one.
+    useEffect(() => {
+        if (folders.length === 0) return;
+        const valid = VIRTUAL_FOLDERS.includes(activeFolderId as typeof VIRTUAL_FOLDERS[number])
+            || folders.some(folder => folder.id === activeFolderId);
+        if (!valid) {
+            setActiveFolderId(folders.find(folder => folder.id !== 'all')?.id || 'all');
+        }
+    }, [folders, activeFolderId]);
+
+    useEffect(() => {
+        if (activeNote && !noteBelongsToWorkspace(activeNote, workspaceId)) {
+            setActiveNoteId(null);
+        }
+    }, [activeNote, workspaceId]);
+
+    // Open a note requested by another module (global search, associated notes…).
+    useEffect(() => {
+        if (!externalNoteId) return;
+        setActiveFolderId('all');
+        setActiveNoteId(externalNoteId);
+        setShowEditor(true);
+        onExternalNoteOpened?.();
+    }, [externalNoteId, onExternalNoteOpened]);
+
+    // Counts for the virtual views and every folder in this workspace.
+    const noteCounts = useLiveQuery(async () => {
+        const all = await db.notes.where('workspaceId').equals(workspaceId).toArray();
+        const counts: Record<string, number> = { all: 0, favorites: 0, archived: 0 };
+        for (const note of all) {
+            if (note.archived === 1) {
+                counts.archived++;
+                continue;
+            }
+            counts.all++;
+            if (note.loved) counts.favorites++;
+            counts[note.folderId] = (counts[note.folderId] || 0) + 1;
+        }
+        return counts;
+    }, [workspaceId]) || { all: 0, favorites: 0, archived: 0 };
 
     // --- Logic ---
     const [showFolders, setShowFolders] = useState(true);
@@ -535,18 +629,23 @@ const NotesPanelContent: React.FC<NotesPanelProps> = ({ zenMode, onToggleZenMode
 
     // --- CRUD ---
     const createNote = async () => {
-        const targetFolder = activeFolderId === 'all' ? 'ninai' : activeFolderId;
-        const newId = Date.now().toString();
-        const newNote: Note = {
-            id: newId,
-            folderId: targetFolder,
-            title: '',
-            content: '',
-            updatedAt: new Date()
-        };
-        await db.notes.add(newNote);
-        setActiveNoteId(newId);
-        setShouldFocusTitle(true);
+        try {
+            const targetFolder = VIRTUAL_FOLDERS.includes(activeFolderId as typeof VIRTUAL_FOLDERS[number])
+                ? undefined
+                : activeFolderId;
+            const note = await createWorkspaceNote(workspaceId, {
+                folderId: targetFolder,
+                title: '',
+                content: '',
+            });
+            setActiveNoteId(note.id);
+            setShouldFocusTitle(true);
+            if (activeFolderId === 'favorites' || activeFolderId === 'archived') {
+                setActiveFolderId(note.folderId);
+            }
+        } catch (error) {
+            toast.error(toErrorMessage(error));
+        }
     };
 
     const folderInputRef = useRef<HTMLInputElement>(null);
@@ -567,10 +666,13 @@ const NotesPanelContent: React.FC<NotesPanelProps> = ({ zenMode, onToggleZenMode
     const confirmCreateFolder = async () => {
         if (newFolderName.trim()) {
             const newId = Date.now().toString();
+            const maxOrder = folders.reduce((max, folder) => Math.max(max, folder.order ?? 0), 0);
             await db.folders.add({
                 id: newId,
                 name: newFolderName,
-                icon: 'Folder'
+                icon: 'Folder',
+                workspaceId,
+                order: maxOrder + 1,
             });
             setActiveFolderId(newId);
             setNewFolderName('');
@@ -583,19 +685,26 @@ const NotesPanelContent: React.FC<NotesPanelProps> = ({ zenMode, onToggleZenMode
     const deleteNote = async (noteId?: string) => {
         const idToDelete = noteId || activeNoteId;
         if (!idToDelete) return;
-        await db.notes.delete(idToDelete);
-        if (activeNoteId === idToDelete) setActiveNoteId(null);
+        try {
+            await deleteNoteCascade(idToDelete);
+            if (activeNoteId === idToDelete) setActiveNoteId(null);
+        } catch (error) {
+            toast.error(toErrorMessage(error));
+        }
     };
 
     const deleteFolder = async (id: string) => {
-        if (id === 'all' || id === 'ninai') {
+        if (VIRTUAL_FOLDERS.includes(id as typeof VIRTUAL_FOLDERS[number]) || id === 'ninai') {
             alert("Cannot delete default folders.");
             return;
         }
         if (confirm('Delete this folder and its notes?')) {
-            await db.folders.delete(id);
-            await db.notes.where('folderId').equals(id).delete();
-            if (activeFolderId === id) setActiveFolderId('ninai');
+            try {
+                await deleteFolderCascade(id);
+                if (activeFolderId === id) setActiveFolderId('all');
+            } catch (error) {
+                toast.error(toErrorMessage(error));
+            }
         }
     };
 
@@ -683,20 +792,7 @@ const NotesPanelContent: React.FC<NotesPanelProps> = ({ zenMode, onToggleZenMode
     }, [folders]);
 
 
-    // Performance: O(n) single-pass counting instead of O(n*m) filtered counts
-    const noteCounts = React.useMemo(() => {
-        const counts: { [key: string]: number } = {};
-        counts['all'] = notes.length;
-        // Initialize all folder counts to 0
-        folders.forEach(f => { if (f.id !== 'all') counts[f.id] = 0; });
-        // Single pass through notes
-        notes.forEach(n => {
-            if (counts[n.folderId] !== undefined) counts[n.folderId]++;
-            else counts[n.folderId] = 1;
-        });
-        return counts;
-        return counts;
-    }, [notes, folders]);
+    // Performance: counts come from the workspace-wide live query above.
 
     // OPTIMIZATION: Memoize grouping (Moved to top level)
     const groupedNotes = React.useMemo(() => {
@@ -807,7 +903,7 @@ const NotesPanelContent: React.FC<NotesPanelProps> = ({ zenMode, onToggleZenMode
                     />
                 </div>
 
-                {zenMode ? (
+                {showZenToggle && (zenMode ? (
                     <button className="column-toggle-collapsed" onClick={onToggleZenMode}>
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 5l7 7-7 7" /><path d="M5 5l7 7-7 7" /></svg>
                     </button>
@@ -815,7 +911,7 @@ const NotesPanelContent: React.FC<NotesPanelProps> = ({ zenMode, onToggleZenMode
                     <button className="column-toggle" onClick={onToggleZenMode}>
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 19l-7-7 7-7" /><path d="M19 19l-7-7 7-7" /></svg>
                     </button>
-                )}
+                ))}
 
                 {showFolders && <div className="panel-resizer" onMouseDown={startResizing('folder')} />}
             </div>
@@ -828,7 +924,7 @@ const NotesPanelContent: React.FC<NotesPanelProps> = ({ zenMode, onToggleZenMode
                 {showList && (
                     <>
                         <header className="notes-header-minimal">
-                            <span className="folder-title-display">{folders.find(f => f.id === activeFolderId)?.name || 'All Notes'}</span>
+                            <span className="folder-title-display">{VIRTUAL_FOLDER_LABELS[activeFolderId] || folders.find(f => f.id === activeFolderId)?.name || 'All Notes'}</span>
                             <button className="icon-btn-primary" onClick={createNote} title="New Note">
                                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
@@ -879,6 +975,34 @@ const NotesPanelContent: React.FC<NotesPanelProps> = ({ zenMode, onToggleZenMode
                         <div className="context-menu-backdrop" onClick={() => setNoteMenu(null)} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />
                         <div className="context-menu" style={{ top: noteMenu.y, left: noteMenu.x, zIndex: 100 }}>
                             <button onClick={() => { setMoveTarget({ type: 'note', id: noteMenu.noteId }); setNoteMenu(null); }} className="menu-item">Move to...</button>
+                            <button
+                                onClick={async () => {
+                                    const note = await db.notes.get(noteMenu.noteId);
+                                    setNoteMenu(null);
+                                    if (!note) return;
+                                    try {
+                                        await archiveNote(note.id, note.archived !== 1);
+                                    } catch (error) {
+                                        toast.error(toErrorMessage(error));
+                                    }
+                                }}
+                                className="menu-item"
+                            >
+                                {activeFolderId === 'archived' ? 'Restore note' : 'Archive note'}
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    setNoteMenu(null);
+                                    try {
+                                        await toggleNoteFavorite(noteMenu.noteId);
+                                    } catch (error) {
+                                        toast.error(toErrorMessage(error));
+                                    }
+                                }}
+                                className="menu-item"
+                            >
+                                Toggle favourite
+                            </button>
                             <div className="menu-divider" />
                             <button onClick={() => deleteNote(noteMenu.noteId)} className="menu-item delete">Delete Note</button>
                         </div>
@@ -991,6 +1115,16 @@ const NotesPanelContent: React.FC<NotesPanelProps> = ({ zenMode, onToggleZenMode
 
                                         <button
                                             className="icon-btn-ghost"
+                                            onClick={() => {
+                                                if (!activeNote) return;
+                                                archiveNote(activeNote.id, activeNote.archived !== 1).catch(error => toast.error(toErrorMessage(error)));
+                                            }}
+                                            title={activeNote?.archived === 1 ? 'Restore Note' : 'Archive Note'}
+                                        >
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="5" rx="1"></rect><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"></path><line x1="10" y1="12" x2="14" y2="12"></line></svg>
+                                        </button>
+                                        <button
+                                            className="icon-btn-ghost"
                                             onClick={() => deleteNote(activeNote?.id)}
                                             title="Delete Note"
                                         >
@@ -1001,6 +1135,8 @@ const NotesPanelContent: React.FC<NotesPanelProps> = ({ zenMode, onToggleZenMode
                                 </div>
 
                                 <div className="editor-canvas">
+                                    <NoteAssociations key={activeNote.id} workspaceId={workspaceId} noteId={activeNote.id} />
+
                                     <input
                                         ref={titleInputRef}
                                         className="clean-title-input"
@@ -1082,10 +1218,10 @@ const NotesPanelContent: React.FC<NotesPanelProps> = ({ zenMode, onToggleZenMode
                                         <button
                                             onClick={() => {
                                                 if (!activeNote) return;
-                                                db.notes.update(activeNote.id, { loved: activeNote.loved ? 0 : 1 });
+                                                toggleNoteFavorite(activeNote.id).catch(error => toast.error(toErrorMessage(error)));
                                             }}
                                             className={activeNote?.loved ? 'active' : ''}
-                                            title={activeNote?.loved ? 'Remove from Loved' : 'Mark as Loved'}
+                                            title={activeNote?.loved ? 'Remove from Favourites' : 'Mark as Favourite'}
                                         >
                                             <svg width="16" height="16" viewBox="0 0 24 24"
                                                 fill={activeNote?.loved ? '#ef4444' : 'none'}
@@ -1252,7 +1388,7 @@ const NotesPanelContent: React.FC<NotesPanelProps> = ({ zenMode, onToggleZenMode
                                 </div>
                             </>
                         ) : (
-                            <HomeDashboard onSelectNote={(noteId) => setActiveNoteId(noteId)} />
+                            <HomeDashboard workspaceId={workspaceId} onSelectNote={(noteId) => setActiveNoteId(noteId)} />
                         )}
                     </div>
                 )
@@ -1276,14 +1412,6 @@ const NotesPanelContent: React.FC<NotesPanelProps> = ({ zenMode, onToggleZenMode
                                 <h3>Move {moveTarget.type === 'note' ? 'Note' : 'Folder'}</h3>
                             </div>
                             <div className="folder-select-list">
-                                <button
-                                    className={`folder-select-item ${activeFolderId === 'ninai' ? 'active' : ''}`}
-                                    onClick={() => handleMoveItem('ninai')}
-                                >
-                                    <span className="folder-icon">
-                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-                                    </span> Home (NINAI)
-                                </button>
                                 {folderOptions.map(f => (
                                     <button
                                         key={f.id}

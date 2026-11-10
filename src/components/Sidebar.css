@@ -29,6 +29,17 @@
     flex: 1;
 }
 
+.sidebar-scroll .tools-list {
+    flex: 0 0 auto;
+    width: 100%;
+    align-items: center;
+    padding-bottom: 12px;
+}
+
+.sidebar-scroll .sidebar-modules {
+    margin-top: 2px;
+}
+
 .tool-icon {
     width: 44px;
     height: 44px;
