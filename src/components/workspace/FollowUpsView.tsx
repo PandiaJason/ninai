@@ -252,7 +252,6 @@ export const FollowUpsView: React.FC<FollowUpsViewProps> = ({ workspaceId, userI
                         icon="followups"
                         title={items.length === 0 ? 'No follow-ups yet' : 'Nothing in this view'}
                         description={items.length === 0 ? 'Schedule the next action from a lead, project, task or right here.' : 'Try another tab or clear the filters.'}
-                        action={<Button variant="primary" icon="plus" onClick={openNew}>New follow-up</Button>}
                     />
                 )}
 

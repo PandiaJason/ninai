@@ -143,7 +143,6 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                         icon="projects"
                         title={projects.length === 0 ? 'No projects yet' : 'Nothing in this view'}
                         description={projects.length === 0 ? 'Create a project to give the work a home, a team and a next milestone.' : 'Try another scope or clear the filters.'}
-                        action={<Button variant="primary" icon="plus" onClick={() => setFormOpen(true)}>New project</Button>}
                     />
                 )}
 

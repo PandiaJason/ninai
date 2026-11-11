@@ -46,7 +46,6 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ workspaceId, nav }
                         icon="target"
                         title="No learners to analyse yet"
                         description="Add learners from real sources, record challenge attempts and collect structured feedback. Insights will build from those records."
-                        action={<Button variant="primary" icon="plus" onClick={() => nav.go('crm')}>Open the learner pipeline</Button>}
                     />
                 ) : (
                     <>

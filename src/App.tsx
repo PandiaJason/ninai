@@ -20,13 +20,11 @@ import { SettingsView } from './components/workspace/SettingsView';
 import { GlobalSearch } from './components/workspace/GlobalSearch';
 import type { ModuleId, WorkspaceNav } from './types/workspace';
 
-const MODULE_IDS: ModuleId[] = ['today', 'dashboard', 'crm', 'analytics', 'projects', 'followups', 'tasks', 'notes', 'calendar', 'settings', 'tools'];
+const MODULE_IDS: ModuleId[] = ['today', 'dashboard', 'crm', 'institutions', 'analytics', 'projects', 'followups', 'tasks', 'notes', 'calendar', 'settings', 'tools'];
 
 function readModule(): ModuleId {
     const saved = localStorage.getItem('ninai_active_module') as ModuleId | null;
-    // Existing installs land on the old overview; Today is the new home.
-    if (saved === 'dashboard') return 'today';
-    return saved && MODULE_IDS.includes(saved) ? saved : 'today';
+    return saved && MODULE_IDS.includes(saved) ? saved : 'dashboard';
 }
 
 // --- Tools State ---
@@ -101,7 +99,7 @@ function App() {
             setSelectedProjectId(null);
             setSelectedTaskId(null);
             setSelectedLeadId(leadId);
-            setActiveModule('crm');
+            setActiveModule(current => (current === 'institutions' ? 'institutions' : 'crm'));
         },
         openProject: (projectId) => {
             setSelectedLeadId(null);
@@ -151,7 +149,7 @@ function App() {
             setSelectedProjectId(null);
             setSelectedTaskId(null);
             setExternalNoteId(null);
-            setActiveModule(module => (module === 'tools' ? module : 'today'));
+            setActiveModule(module => (module === 'tools' ? module : 'dashboard'));
         }
         prevWorkspaceId.current = workspace?.id;
     }, [workspace?.id]);
@@ -242,6 +240,19 @@ function App() {
                     <CRMView
                         workspaceId={workspace.id}
                         userId={user.id}
+                        audience="learner"
+                        selectedLeadId={selectedLeadId}
+                        onCloseLead={() => setSelectedLeadId(null)}
+                        nav={nav}
+                    />
+                );
+            case 'institutions':
+                return (
+                    <CRMView
+                        workspaceId={workspace.id}
+                        userId={user.id}
+                        audience="institution"
+                        defaultView="kanban"
                         selectedLeadId={selectedLeadId}
                         onCloseLead={() => setSelectedLeadId(null)}
                         nav={nav}
@@ -313,9 +324,9 @@ function App() {
             fullNotes={notesModule}
             notesLocked={workspaceModule && !notesModule}
             contentHidden={notesModule}
-            hideSidebarToggle={workspaceModule}
-            isSidebarOpen={workspaceModule ? true : isSidebarOpen}
-            setSidebarOpen={workspaceModule ? () => { } : setIsSidebarOpen}
+            hideSidebarToggle={false}
+            isSidebarOpen={isSidebarOpen}
+            setSidebarOpen={setIsSidebarOpen}
             isNotesOpen={isNotesOpen}
             setNotesOpen={setIsNotesOpen}
         >

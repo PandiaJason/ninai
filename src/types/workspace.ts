@@ -2,6 +2,7 @@ export type ModuleId =
     | 'today'
     | 'dashboard'
     | 'crm'
+    | 'institutions'
     | 'analytics'
     | 'projects'
     | 'followups'

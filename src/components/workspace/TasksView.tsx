@@ -156,7 +156,6 @@ export const TasksView: React.FC<TasksViewProps> = ({ workspaceId, userId, selec
                         icon="tasks"
                         title={tasks.length === 0 ? 'No tasks yet' : 'No tasks match this view'}
                         description={tasks.length === 0 ? 'Create a task to start tracking work.' : 'Try another tab, or clear the search and filters.'}
-                        action={<Button variant="primary" icon="plus" onClick={() => setFormOpen(true)}>New task</Button>}
                     />
                 )}
 

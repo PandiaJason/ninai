@@ -31,7 +31,8 @@ export const TodayView: React.FC<TodayViewProps> = ({ workspaceId, userId, userN
     const [busyId, setBusyId] = useState<string | null>(null);
     const [feedbackTarget, setFeedbackTarget] = useState<FeedbackTarget | null>(null);
 
-    const firstName = userName.split(/\s+/)[0] || userName;
+    const firstName = userName.split(/\s+/)[0] || '';
+    const greetingName = firstName && firstName.toLowerCase() !== 'workspace' ? `, ${firstName}` : '';
     const hour = new Date().getHours();
     const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
     const dateLabel = new Intl.DateTimeFormat('en-GB', {
@@ -99,7 +100,7 @@ export const TodayView: React.FC<TodayViewProps> = ({ workspaceId, userId, userN
             <div className="ws-module-inner ws-today-inner">
                 <header className="ws-today-head">
                     <div className="ws-eyebrow">Today</div>
-                    <h1>{greeting}, {firstName}</h1>
+                    <h1>{greeting}{greetingName}</h1>
                     <p>
                         {dateLabel}
                         {data ? ` · ${total === 0 ? 'nothing needs you right now' : `${total} thing${total === 1 ? '' : 's'} need a next step`}` : ''}
@@ -134,7 +135,7 @@ export const TodayView: React.FC<TodayViewProps> = ({ workspaceId, userId, userN
                                             <div className="ws-today-row-meta">
                                                 <span>{item.meta}</span>
                                                 <Button
-                                                    variant={item.kind === 'feedback_requested' || item.kind === 'activation' ? 'primary' : 'secondary'}
+                                                    variant="secondary"
                                                     onClick={() => void run(item)}
                                                     loading={busyId === item.id}
                                                     aria-label={`${item.actionLabel}: ${item.title}`}

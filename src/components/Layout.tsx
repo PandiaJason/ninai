@@ -123,6 +123,8 @@ export const Layout: React.FC<LayoutProps> = ({
                             className="sidebar-toggle"
                             onClick={() => setSidebarOpen(!isSidebarOpen)}
                             title={isSidebarOpen ? "Collapse Sidebar" : "Expand Sidebar"}
+                            aria-label={isSidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+                            aria-expanded={isSidebarOpen}
                         >
                             {isSidebarOpen ? '«' : '»'}
                         </button>
@@ -132,14 +134,6 @@ export const Layout: React.FC<LayoutProps> = ({
 
             <main className={`layout-content ${!contentVisible ? 'hidden' : ''}`}>
                 {children}
-                {!isSidebarOpen && contentVisible && (
-                    <button
-                        className="sidebar-toggle-floating"
-                        onClick={() => setSidebarOpen(true)}
-                    >
-                        »
-                    </button>
-                )}
             </main>
 
             {/* Resizer - Absolute */}

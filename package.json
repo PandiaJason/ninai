@@ -125,6 +125,7 @@
     "@tiptap/extension-table-row": "^3.19.0",
     "@types/turndown": "^5.0.6",
     "lowlight": "^3.3.0",
+    "lucide-react": "^1.72.0",
     "marked": "^17.0.1"
   }
 }

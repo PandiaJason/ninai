@@ -47,6 +47,7 @@ interface LeadDetailProps {
     leadId: string;
     nav: WorkspaceNav;
     onBack: () => void;
+    variant?: 'page' | 'drawer';
 }
 
 const ACTIVITY_TYPES: { id: LeadActivityType; label: string; icon: 'phone' | 'mail' | 'calendar' | 'message' | 'clock' | 'notes' | 'refresh' }[] = [
@@ -58,7 +59,7 @@ const ACTIVITY_TYPES: { id: LeadActivityType; label: string; icon: 'phone' | 'ma
     { id: 'note', label: 'Note', icon: 'notes' },
 ];
 
-export const LeadDetail: React.FC<LeadDetailProps> = ({ workspaceId, leadId, nav, onBack }) => {
+export const LeadDetail: React.FC<LeadDetailProps> = ({ workspaceId, leadId, nav, onBack, variant = 'page' }) => {
     const { user, members } = useAuth();
     const toast = useToast();
     const [editing, setEditing] = useState(false);
@@ -90,11 +91,12 @@ export const LeadDetail: React.FC<LeadDetailProps> = ({ workspaceId, leadId, nav
     const stage = stages.find(item => item.id === lead?.stageId);
     const owner = members.find(member => member.id === lead?.ownerId);
     const isLearner = (lead?.audience || 'learner') === 'learner';
+    const isDrawer = variant === 'drawer';
     const feedback = data?.feedback;
 
     if (!lead) {
         return (
-            <div className="ws-module">
+            <div className={`ws-module ${isDrawer ? 'ws-detail-drawer' : ''}`}>
                 <div className="ws-module-inner">
                     <PageLoading loading={loading} error={error} onRetry={() => void reload()} onBack={onBack} />
                 </div>
@@ -227,11 +229,11 @@ export const LeadDetail: React.FC<LeadDetailProps> = ({ workspaceId, leadId, nav
     ];
 
     return (
-        <div className="ws-module">
+        <div className={`ws-module ${isDrawer ? 'ws-detail-drawer' : ''}`}>
             <div className="ws-module-inner">
                 <header className="ws-detail-head">
                     <div className="ws-detail-title">
-                        <IconButton icon="arrow-left" label="Back to leads" onClick={onBack} />
+                        <IconButton icon={isDrawer ? 'x' : 'arrow-left'} label={isDrawer ? 'Close details' : 'Back to leads'} onClick={onBack} />
                         <Avatar name={lead.name} size={46} color={owner?.avatarColor} />
                         <div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>

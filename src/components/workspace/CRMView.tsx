@@ -16,9 +16,10 @@ import { formatDate } from '../../services/validation';
 import { toErrorMessage } from '../../services/errors';
 import { PRIORITIES, PRIORITY_LABEL } from '../../services/validation';
 import type { WorkspaceNav } from '../../types/workspace';
-import { Avatar, Badge, Button, ConfirmDialog, EmptyState, IconButton, PageHeader, SearchInput } from '../ui/Misc';
+import { Avatar, Badge, Button, ConfirmDialog, EmptyState, PageHeader, SearchInput } from '../ui/Misc';
 import { Icon } from '../ui/Icon';
 import { OverflowMenu } from '../ui/OverflowMenu';
+import { Drawer } from '../ui/Drawer';
 import { Select } from '../ui/Form';
 import { useToast } from '../ui/Toast';
 import { DataState, PRIORITY_COLOR, PriorityDot, formatMoney } from './shared';
@@ -33,6 +34,8 @@ type SortKey = 'updated' | 'name' | 'value' | 'created';
 interface CRMViewProps {
     workspaceId: string;
     userId: string;
+    audience?: LeadAudience;
+    defaultView?: ViewMode;
     selectedLeadId: string | null;
     onCloseLead: () => void;
     nav: WorkspaceNav;
@@ -40,13 +43,18 @@ interface CRMViewProps {
 
 const PAGE_SIZE = 12;
 
-export const CRMView: React.FC<CRMViewProps> = ({ workspaceId, userId, selectedLeadId, onCloseLead, nav }) => {
+export const CRMView: React.FC<CRMViewProps> = ({
+    workspaceId,
+    userId,
+    audience = 'learner',
+    defaultView = 'table',
+    selectedLeadId,
+    onCloseLead,
+    nav,
+}) => {
     const { user, members } = useAuth();
     const toast = useToast();
-    const [view, setView] = useState<ViewMode>('table');
-    const [audience, setAudience] = useState<LeadAudience>(() => (
-        localStorage.getItem('ninai_crm_audience') === 'institution' ? 'institution' : 'learner'
-    ));
+    const [view, setView] = useState<ViewMode>(defaultView);
     const [search, setSearch] = useState('');
     const [stageFilter, setStageFilter] = useState('all');
     const [ownerFilter, setOwnerFilter] = useState('all');
@@ -84,27 +92,33 @@ export const CRMView: React.FC<CRMViewProps> = ({ workspaceId, userId, selectedL
     const audienceLeads = leads.filter(lead => (lead.audience || 'learner') === audience);
     const audienceStages = stagesForAudience(stages, audience);
     const isLearner = audience === 'learner';
-    const learnerCount = leads.filter(lead => (lead.audience || 'learner') === 'learner').length;
-    const institutionCount = leads.filter(lead => lead.audience === 'institution').length;
+
+    // The learner and institution modules share this view, so reset per-module
+    // state whenever the audience changes.
+    React.useEffect(() => {
+        setView(defaultView);
+        setSearch('');
+        setStageFilter('all');
+        setOwnerFilter('all');
+        setPriorityFilter('all');
+        setSourceFilter('all');
+        setQualityFilter('all');
+        setShowArchived(false);
+        setFiltersOpen(false);
+        setSelectionMode(false);
+        setSelected(new Set());
+        setPage(1);
+        setFormOpen(false);
+        setEditing(null);
+        setImportOpen(false);
+    }, [audience, defaultView]);
 
     const changeView = (next: ViewMode) => {
         setView(next);
-        localStorage.setItem('ninai_crm_view', next);
         if (next === 'kanban') {
             setSelectionMode(false);
             setSelected(new Set());
         }
-    };
-
-    const changeAudience = (next: LeadAudience) => {
-        setAudience(next);
-        localStorage.setItem('ninai_crm_audience', next);
-        setStageFilter('all');
-        setSourceFilter('all');
-        setQualityFilter('all');
-        setPage(1);
-        setSelected(new Set());
-        setSelectionMode(false);
     };
 
     const activeFilterCount = [
@@ -196,7 +210,7 @@ export const CRMView: React.FC<CRMViewProps> = ({ workspaceId, userId, selectedL
             else if (action === 'archive') await bulkArchiveLeads(ids, true);
             else if (action === 'restore') await bulkArchiveLeads(ids, false);
             else if (action === 'move' && bulkStage) await bulkMoveLeads(ids, bulkStage);
-            toast.success(`${ids.length} lead${ids.length === 1 ? '' : 's'} updated.`);
+            toast.success(`${ids.length} ${isLearner ? 'learner' : 'institution'}${ids.length === 1 ? '' : 's'} updated.`);
             setSelected(new Set());
             setConfirmDelete(false);
             setConfirmArchive(false);
@@ -233,12 +247,6 @@ export const CRMView: React.FC<CRMViewProps> = ({ workspaceId, userId, selectedL
             onSelect: () => void exportCsv(Array.from(selected)),
         },
         {
-            id: 'view',
-            label: view === 'table' ? 'Switch to board view' : 'Switch to table view',
-            icon: (view === 'table' ? 'kanban' : 'table') as 'kanban' | 'table',
-            onSelect: () => changeView(view === 'table' ? 'kanban' : 'table'),
-        },
-        {
             id: 'select',
             label: selectionMode ? 'Done selecting' : 'Select records',
             icon: 'check' as const,
@@ -260,40 +268,23 @@ export const CRMView: React.FC<CRMViewProps> = ({ workspaceId, userId, selectedL
         }
     };
 
-    if (selectedLeadId) {
-        return <LeadDetail workspaceId={workspaceId} leadId={selectedLeadId} nav={nav} onBack={onCloseLead} />;
-    }
-
     return (
         <div className="ws-module">
             <div className="ws-module-inner">
                 <PageHeader
-                    eyebrow="ALGO CRM"
-                    title={isLearner ? 'Learner pipeline' : 'Institution pipeline'}
+                    title={isLearner ? 'Learners' : 'Institutions'}
                     subtitle={isLearner
-                        ? `${audienceLeads.length} learner${audienceLeads.length === 1 ? '' : 's'} · activation means a challenge attempt, not a sign-up.`
-                        : `${audienceLeads.length} institution${audienceLeads.length === 1 ? '' : 's'} · discovery and pilots only; there is no confirmed offer yet.`}
+                        ? `${audienceLeads.length} learner${audienceLeads.length === 1 ? '' : 's'} · activation starts with a challenge attempt, not a sign-up.`
+                        : `${audienceLeads.length} institution${audienceLeads.length === 1 ? '' : 's'} · discovery, pilots and signed partnerships.`}
                     actions={(
                         <>
-                            <IconButton
-                                icon="plus"
-                                label={isLearner ? 'Add learner' : 'Add institution'}
-                                className="ws-add-primary"
-                                onClick={() => { setEditing(null); setFormOpen(true); }}
-                            />
+                            <Button variant="primary" icon="plus" onClick={() => { setEditing(null); setFormOpen(true); }}>
+                                {isLearner ? 'Add learner' : 'Add institution'}
+                            </Button>
                             <OverflowMenu label={isLearner ? 'Learner actions' : 'Institution actions'} items={overflowItems} />
                         </>
                     )}
                 />
-
-                <div className="ws-pipeline-tabs" role="tablist" aria-label="ALGO pipeline">
-                    <button className={isLearner ? 'active' : ''} onClick={() => changeAudience('learner')} role="tab" aria-selected={isLearner}>
-                        <Icon name="users" size={14} /> Learners <span>{learnerCount}</span>
-                    </button>
-                    <button className={!isLearner ? 'active' : ''} onClick={() => changeAudience('institution')} role="tab" aria-selected={!isLearner}>
-                        <Icon name="building" size={14} /> Institutions <span>{institutionCount}</span>
-                    </button>
-                </div>
 
                 <div className="ws-toolbar ws-toolbar-learner">
                     <SearchInput value={search} onChange={value => { setSearch(value); setPage(1); }} placeholder={isLearner ? 'Search learners, source, notes…' : 'Search institutions, contacts, notes…'} className="ws-search-wide" />
@@ -307,6 +298,28 @@ export const CRMView: React.FC<CRMViewProps> = ({ workspaceId, userId, selectedL
                         Filters{activeFilterCount > 0 ? ` · ${activeFilterCount}` : ''}
                     </Button>
                     <span className="ws-toolbar-spacer" />
+                    <div className="ws-segmented" role="group" aria-label="View">
+                        <button
+                            type="button"
+                            className={view === 'table' ? 'active' : ''}
+                            onClick={() => changeView('table')}
+                            aria-pressed={view === 'table'}
+                            title="Table view"
+                        >
+                            <Icon name="table" size={14} />
+                            <span className="ws-view-label">Table</span>
+                        </button>
+                        <button
+                            type="button"
+                            className={view === 'kanban' ? 'active' : ''}
+                            onClick={() => changeView('kanban')}
+                            aria-pressed={view === 'kanban'}
+                            title="Board view"
+                        >
+                            <Icon name="kanban" size={14} />
+                            <span className="ws-view-label">Board</span>
+                        </button>
+                    </div>
                 </div>
 
                 {filtersOpen && (
@@ -371,7 +384,7 @@ export const CRMView: React.FC<CRMViewProps> = ({ workspaceId, userId, selectedL
                         icon="crm"
                         title={audienceLeads.length === 0 ? (isLearner ? 'No learners yet' : 'No institutions yet') : 'No records match these filters'}
                         description={audienceLeads.length === 0
-                            ? (isLearner ? 'Use the + button above to add your first learner, or bring in a CSV from the actions menu.' : 'Use the + button above to add a college or training institute. No offer is promised yet.')
+                            ? (isLearner ? 'Add your first learner from the header, or bring in a CSV from the actions menu.' : 'Add a college or training institute from the header. Start with discovery, not a promised offer.')
                             : 'Try clearing the search or filters.'}
                     />
                 )}
@@ -554,7 +567,7 @@ export const CRMView: React.FC<CRMViewProps> = ({ workspaceId, userId, selectedL
                             </tbody>
                         </table>
                         <div className="ws-table-footer">
-                            <span>{filtered.length} lead{filtered.length === 1 ? '' : 's'} · page {currentPage} of {pageCount}</span>
+                            <span>{filtered.length} {isLearner ? 'learner' : 'institution'}{filtered.length === 1 ? '' : 's'} · page {currentPage} of {pageCount}</span>
                             <Pagination page={currentPage} pageCount={pageCount} onChange={setPage} />
                         </div>
                     </div>
@@ -601,6 +614,22 @@ export const CRMView: React.FC<CRMViewProps> = ({ workspaceId, userId, selectedL
                 onCancel={() => setConfirmArchive(false)}
                 onConfirm={() => void runBulk('archive')}
             />
+
+            <Drawer
+                open={!!selectedLeadId}
+                onClose={onCloseLead}
+                label={`${isLearner ? 'Learner' : 'Institution'} details`}
+            >
+                {selectedLeadId && (
+                    <LeadDetail
+                        workspaceId={workspaceId}
+                        leadId={selectedLeadId}
+                        nav={nav}
+                        onBack={onCloseLead}
+                        variant="drawer"
+                    />
+                )}
+            </Drawer>
         </div>
     );
 };

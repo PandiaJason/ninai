@@ -49,6 +49,7 @@ export interface DashboardProject extends Project {
 export interface DashboardData {
     stats: DashboardStats;
     recentLeads: DashboardLead[];
+    learnerActivity: DashboardLead[];
     myTasks: DashboardTask[];
     myFollowUps: FollowUpWithMeta[];
     projects: DashboardProject[];
@@ -146,6 +147,15 @@ export async function getDashboardData(workspaceId: string, userId: string): Pro
             ownerName: userMap.get(lead.ownerId)?.name || 'Unassigned',
         }));
 
+    const learnerActivity = activeLearners
+        .sort((a, b) => (b.lastActiveAt || b.updatedAt) - (a.lastActiveAt || a.updatedAt))
+        .slice(0, 6)
+        .map(lead => ({
+            ...lead,
+            stage: stageMap.get(lead.stageId),
+            ownerName: userMap.get(lead.ownerId)?.name || 'Unassigned',
+        }));
+
     const myTasks: DashboardTask[] = pendingTasks
         .filter(t => t.assigneeId === userId)
         .sort((a, b) => {
@@ -170,5 +180,5 @@ export async function getDashboardData(workspaceId: string, userId: string): Pro
         listActivities(workspaceId, 8),
     ]);
 
-    return { stats, recentLeads, myTasks, myFollowUps, projects: activeProjects, upcoming, recentNotes, activity };
+    return { stats, recentLeads, learnerActivity, myTasks, myFollowUps, projects: activeProjects, upcoming, recentNotes, activity };
 }
