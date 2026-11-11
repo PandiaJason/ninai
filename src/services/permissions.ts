@@ -1,4 +1,4 @@
-import { db, type Lead, type Task, type UserRole } from '../db';
+import { db, type Lead, type Project, type Task, type UserRole } from '../db';
 import { requireUser, type SessionUser } from './auth';
 import { AppError } from './errors';
 
@@ -32,6 +32,16 @@ export async function assertTaskEdit(user: SessionUser, task: Task): Promise<voi
     if (user.role === 'admin') return;
     if (task.assigneeId === user.id || task.createdBy === user.id) return;
     throw new AppError('FORBIDDEN', 'You can only edit tasks assigned to you or created by you.');
+}
+
+export async function assertProjectEdit(user: SessionUser, project: Project): Promise<void> {
+    if (user.role === 'admin' || project.ownerId === user.id || project.createdBy === user.id) return;
+    throw new AppError('FORBIDDEN', 'Only the project owner, creator or an admin can edit this project.');
+}
+
+export async function assertProjectDelete(user: SessionUser, project: Project): Promise<void> {
+    if (user.role === 'admin' || project.createdBy === user.id) return;
+    throw new AppError('FORBIDDEN', 'Only the project creator or an admin can delete this project.');
 }
 
 export async function assertTaskDelete(user: SessionUser, task: Task): Promise<void> {

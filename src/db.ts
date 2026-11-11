@@ -178,6 +178,31 @@ export interface ProjectMilestone {
 }
 
 /* ------------------------------------------------------------------ */
+/* Follow-ups                                                           */
+/* ------------------------------------------------------------------ */
+
+export type FollowUpStatus = 'pending' | 'completed' | 'cancelled';
+export type FollowUpChannel = 'call' | 'email' | 'meeting' | 'message' | 'other';
+
+export interface FollowUp {
+    id: string;
+    workspaceId: string;
+    entityType: EntityType;
+    entityId: string;
+    title: string;
+    notes?: string;
+    channel: FollowUpChannel;
+    dueAt: number;
+    status: FollowUpStatus;
+    completedAt?: number;
+    outcome?: string;
+    assignedTo?: string;
+    createdBy: string;
+    createdAt: number;
+    updatedAt: number;
+}
+
+/* ------------------------------------------------------------------ */
 /* Tasks                                                                */
 /* ------------------------------------------------------------------ */
 
@@ -295,6 +320,35 @@ export interface Activity {
 }
 
 /* ------------------------------------------------------------------ */
+/* Version history / cloud backup                                       */
+/* ------------------------------------------------------------------ */
+
+export type WorkspaceVersionKind = 'manual' | 'automatic' | 'cloud' | 'git';
+
+export interface WorkspaceVersion {
+    id: string;
+    workspaceId: string;
+    message: string;
+    kind: WorkspaceVersionKind;
+    createdBy: string;
+    createdAt: number;
+    parentId?: string;
+    data: string;          // JSON snapshot, never includes password material
+    size: number;
+    entityCount: number;
+}
+
+export interface SyncState {
+    id: string;
+    workspaceId: string;
+    provider: string;      // 'cloudflare' | 'custom'
+    endpoint?: string;
+    lastSyncedAt?: number;
+    lastVersionId?: string;
+    updatedAt: number;
+}
+
+/* ------------------------------------------------------------------ */
 /* Database                                                             */
 /* ------------------------------------------------------------------ */
 
@@ -335,9 +389,40 @@ export class NinaiDB extends Dexie {
     noteLinks!: Table<NoteLink>;
     notifications!: Table<Notification>;
     activities!: Table<Activity>;
+    followUps!: Table<FollowUp>;
+    workspaceVersions!: Table<WorkspaceVersion>;
+    syncState!: Table<SyncState>;
 
     constructor() {
         super('NinaiDB');
+
+        // Version 9: Projects return, unified follow-ups, version history and cloud backup state.
+        this.version(9).stores({
+            notes: 'id, folderId, title, updatedAt, loved, hasReminders, workspaceId, archived, [workspaceId+folderId], [workspaceId+updatedAt]',
+            folders: 'id, name, parentId, order, workspaceId',
+            users: 'id, &email, role, workspaceId, active',
+            workspaces: 'id, name, ownerId',
+            workspaceMembers: 'id, workspaceId, userId, [workspaceId+userId]',
+            leadStages: 'id, workspaceId, order, [workspaceId+order]',
+            leads: 'id, workspaceId, ownerId, stageId, priority, archived, createdAt, updatedAt, nextFollowUpAt, [workspaceId+archived], [workspaceId+stageId], [workspaceId+ownerId]',
+            leadActivities: 'id, workspaceId, leadId, userId, type, occurredAt, [leadId+occurredAt]',
+            projects: 'id, workspaceId, ownerId, status, priority, identifier, archived, createdAt, updatedAt, [workspaceId+status], [workspaceId+archived]',
+            projectMembers: 'id, projectId, userId, [projectId+userId]',
+            projectLeads: 'id, projectId, leadId, [projectId+leadId], [leadId+projectId]',
+            projectMilestones: 'id, workspaceId, projectId, dueDate, completed, [projectId+completed]',
+            tasks: 'id, workspaceId, projectId, leadId, assigneeId, status, priority, dueDate, createdAt, updatedAt, [projectId+status], [assigneeId+status], [workspaceId+status], [workspaceId+assigneeId], [workspaceId+dueDate]',
+            subtasks: 'id, taskId, order',
+            taskComments: 'id, taskId, userId, createdAt, [taskId+createdAt]',
+            calendarEvents: 'id, workspaceId, startAt, endAt, type, leadId, projectId, [workspaceId+startAt]',
+            tags: 'id, workspaceId, name, [workspaceId+name]',
+            recordTags: 'id, workspaceId, tagId, entityType, entityId, [entityType+entityId], [entityId+entityType]',
+            noteLinks: 'id, workspaceId, noteId, entityType, entityId, [entityType+entityId], [noteId+entityType]',
+            notifications: 'id, workspaceId, userId, read, createdAt, [userId+read]',
+            activities: 'id, workspaceId, entityType, entityId, userId, createdAt, [workspaceId+createdAt], [entityType+entityId]',
+            followUps: 'id, workspaceId, entityType, entityId, status, dueAt, assignedTo, createdBy, createdAt, updatedAt, [workspaceId+status], [workspaceId+dueAt], [workspaceId+assignedTo], [entityType+entityId]',
+            workspaceVersions: 'id, workspaceId, kind, createdBy, createdAt, [workspaceId+createdAt]',
+            syncState: 'id, workspaceId, provider, lastSyncedAt',
+        });
 
         // Version 8: Workspace / CRM / projects / tasks / calendar foundation.
         // Existing notes and folders are preserved; workspaceId/archived are backfilled.

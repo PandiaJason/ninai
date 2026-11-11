@@ -9,7 +9,8 @@ export type IconName =
     | 'list' | 'table' | 'star' | 'activity' | 'bell' | 'logout' | 'lock' | 'eye'
     | 'external' | 'flag' | 'refresh' | 'folder' | 'inbox' | 'heart' | 'message'
     | 'file' | 'briefcase' | 'circle-check' | 'plus-circle' | 'calendar-plus' | 'send'
-    | 'copy' | 'sparkles' | 'more-vertical' | 'grid' | 'at-sign' | 'map-pin';
+    | 'copy' | 'sparkles' | 'more-vertical' | 'grid' | 'at-sign' | 'map-pin'
+    | 'projects' | 'followups' | 'cloud' | 'history' | 'git-branch';
 
 interface IconProps {
     name: IconName;
@@ -84,6 +85,11 @@ export const Icon: React.FC<IconProps> = ({ name, size = 18, strokeWidth = 1.8, 
             case 'sparkles': return <><path d="m12 3 1.9 4.1L18 9l-4.1 1.9L12 15l-1.9-4.1L6 9l4.1-1.9z" /><path d="m19 15 .8 1.7 1.7.8-1.7.8L19 20l-.8-1.7-1.7-.8 1.7-.8z" /></>;
             case 'at-sign': return <><circle cx="12" cy="12" r="4" /><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.92 7.94" /></>;
             case 'map-pin': return <><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></>;
+            case 'projects': return <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M8 4v16M3 10h5M3 15h5" /><path d="M11 9h6M11 13h4" /></>;
+            case 'followups': return <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /><path d="m16.5 17.5 1.5 1.5 3-3" /></>;
+            case 'cloud': return <><path d="M18 18a4 4 0 0 0 .5-7.97A6 6 0 0 0 6.7 9.3 3.5 3.5 0 0 0 7 18z" /><path d="M12 12v6M9.5 15.5 12 18l2.5-2.5" /></>;
+            case 'history': return <><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5M12 7v5l3 2" /></>;
+            case 'git-branch': return <><circle cx="6" cy="5" r="2" /><circle cx="6" cy="19" r="2" /><circle cx="18" cy="7" r="2" /><path d="M6 7v10M8 5h4a4 4 0 0 1 4 4v8" /></>;
             default: return null;
         }
     })();

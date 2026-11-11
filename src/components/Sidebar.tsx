@@ -21,6 +21,8 @@ interface SidebarProps {
 const MODULES: { id: ModuleId; label: string; icon: IconName }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
     { id: 'crm', label: 'CRM', icon: 'crm' },
+    { id: 'projects', label: 'Projects', icon: 'projects' },
+    { id: 'followups', label: 'Follow-ups', icon: 'followups' },
     { id: 'tasks', label: 'Tasks', icon: 'tasks' },
     { id: 'notes', label: 'Notes', icon: 'notes' },
     { id: 'calendar', label: 'Calendar', icon: 'calendar' },

@@ -44,6 +44,7 @@ export interface TaskInput {
     title: string;
     description?: string;
     leadId?: string | null;
+    projectId?: string | null;
     assigneeId?: string | null;
     priority?: Priority;
     status?: TaskStatus;
@@ -63,6 +64,14 @@ async function assertLead(workspaceId: string, leadId?: string | null): Promise<
     const lead = await db.leads.get(leadId);
     if (!lead || lead.workspaceId !== workspaceId) {
         throw new AppError('VALIDATION', 'The selected lead does not exist in this workspace.');
+    }
+}
+
+async function assertProject(workspaceId: string, projectId?: string | null): Promise<void> {
+    if (!projectId) return;
+    const project = await db.projects.get(projectId);
+    if (!project || project.workspaceId !== workspaceId) {
+        throw new AppError('VALIDATION', 'The selected project does not exist in this workspace.');
     }
 }
 
@@ -158,16 +167,19 @@ async function normalizeTask(
     }
 
     const leadId = input.leadId === undefined ? existing?.leadId : (input.leadId || undefined);
+    const projectId = input.projectId === undefined ? existing?.projectId : (input.projectId || undefined);
     const assigneeId = input.assigneeId === undefined ? existing?.assigneeId : (input.assigneeId || undefined);
 
     await assertAssignee(workspaceId, assigneeId);
     await assertLead(workspaceId, leadId);
+    await assertProject(workspaceId, projectId);
 
     const status = oneOf(input.status ?? existing?.status ?? 'backlog', TASK_STATUSES, 'Task status');
 
     return {
         workspaceId,
         leadId,
+        projectId,
         assigneeId,
         title,
         description: optional(input.description ?? existing?.description, 'Description', 5000),

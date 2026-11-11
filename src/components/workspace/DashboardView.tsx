@@ -3,7 +3,7 @@ import type { WorkspaceNav } from '../../types/workspace';
 import { getDashboardData } from '../../services/dashboard';
 import { Avatar, Badge, Button, EmptyState, PageHeader, SectionCard, StatCard } from '../ui/Misc';
 import { Icon } from '../ui/Icon';
-import { DataState, PriorityBadge, Timeline, formatMoney } from './shared';
+import { DataState, PriorityBadge, ProjectStatusBadge, Timeline, formatMoney } from './shared';
 import { formatDate, formatDateTime } from '../../services/validation';
 import { useAsyncData } from './useAsyncData';
 
@@ -21,7 +21,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ workspaceId, userI
         return <div className="ws-module"><div className="ws-module-inner"><DataState loading={loading} error={error} onRetry={() => void reload()} /></div></div>;
     }
 
-    const { stats, recentLeads, myTasks, upcoming, recentNotes, activity } = data;
+    const { stats, recentLeads, myTasks, myFollowUps, projects, upcoming, recentNotes, activity } = data;
     const firstName = userName.split(/\s+/)[0] || userName;
     const hour = new Date().getHours();
     const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
@@ -32,11 +32,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ workspaceId, userI
                 <PageHeader
                     eyebrow="Workspace overview"
                     title={`${greeting}, ${firstName}`}
-                    subtitle="Everything moving across leads and tasks — with your notes close at hand."
+                    subtitle="Everything moving across leads, projects, follow-ups and tasks — with your notes close at hand."
                     actions={(
                         <>
                             <Button icon="search" onClick={nav.openSearch}>Search</Button>
-                            <Button icon="crm" onClick={() => nav.go('crm')}>Open CRM</Button>
+                            <Button icon="projects" onClick={() => nav.go('projects')}>Projects</Button>
+                            <Button icon="followups" onClick={() => nav.go('followups')}>Follow-ups</Button>
                             <Button variant="primary" icon="tasks" onClick={() => nav.go('tasks')}>My tasks</Button>
                         </>
                     )}
@@ -44,8 +45,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ workspaceId, userI
 
                 <div className="ws-grid ws-grid-3" style={{ marginBottom: 18 }}>
                     <StatCard label="Active leads" value={stats.totalLeads} hint={`${stats.newLeads} new · ${stats.qualifiedLeads} qualified`} icon="crm" tone="blue" onClick={() => nav.go('crm')} />
-                    <StatCard label="Open tasks" value={stats.pendingTasks} hint={`${stats.myOpenTasks} assigned to you`} icon="tasks" tone="orange" onClick={() => nav.go('tasks')} />
-                    <StatCard label="Overdue tasks" value={stats.overdueTasks} hint={`${stats.upcomingDeadlines} due this week`} icon="alert" tone="red" onClick={() => nav.go('tasks')} />
+                    <StatCard label="Open tasks" value={stats.pendingTasks} hint={`${stats.overdueTasks} overdue · ${stats.myOpenTasks} assigned to you`} icon="tasks" tone="orange" onClick={() => nav.go('tasks')} />
+                    <StatCard label="Follow-ups" value={stats.pendingFollowUps} hint={`${stats.overdueFollowUps} overdue · ${stats.activeProjects} active projects`} icon="followups" tone={stats.overdueFollowUps ? 'red' : 'purple'} onClick={() => nav.go('followups')} />
                 </div>
 
                 <div className="ws-grid" style={{ gridTemplateColumns: 'minmax(0, 1.35fr) minmax(0, 1fr)', gap: 18 }}>
@@ -82,6 +83,33 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ workspaceId, userI
                             )}
                         </SectionCard>
 
+                        <SectionCard
+                            title="Projects"
+                            description="Active work coming back to life."
+                            action={<Button size="sm" variant="ghost" icon="arrow-right" onClick={() => nav.go('projects')}>View all</Button>}
+                        >
+                            {projects.length === 0 ? (
+                                <EmptyState compact icon="projects" title="No active projects" description="Create a project to give the work a home and a next milestone." action={<Button size="sm" variant="primary" onClick={() => nav.go('projects')}>New project</Button>} />
+                            ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                    {projects.map(project => (
+                                        <button
+                                            key={project.id}
+                                            onClick={() => nav.openProject(project.id)}
+                                            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 2px', border: 'none', background: 'none', borderBottom: '1px solid var(--border-subtle)', textAlign: 'left', cursor: 'pointer', width: '100%' }}
+                                        >
+                                            <span className="ws-search-result-icon" style={{ width: 28, height: 28, flex: '0 0 auto' }}><Icon name="projects" size={13} /></span>
+                                            <span style={{ flex: 1, minWidth: 0 }}>
+                                                <span style={{ display: 'block', fontSize: 12.5, fontWeight: 600 }}>{project.name}</span>
+                                                <span style={{ display: 'block', fontSize: 10.5, color: 'var(--text-tertiary)', marginTop: 2 }}>{project.identifier} · {project.ownerName}</span>
+                                            </span>
+                                            <ProjectStatusBadge status={project.status} />
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </SectionCard>
+
                         <SectionCard title="Recent activity" description="Changes across the workspace.">
                             <Timeline
                                 empty="No activity recorded yet."
@@ -96,6 +124,33 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ workspaceId, userI
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+                        <SectionCard
+                            title="My follow-ups"
+                            description="Next actions assigned to you."
+                            action={<Button size="sm" variant="ghost" icon="arrow-right" onClick={() => nav.go('followups')}>All</Button>}
+                        >
+                            {myFollowUps.length === 0 ? (
+                                <EmptyState compact icon="followups" title="No follow-ups assigned" description="Schedule the next call, email or meeting from any record." action={<Button size="sm" variant="primary" onClick={() => nav.go('followups')}>Open follow-ups</Button>} />
+                            ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                    {myFollowUps.map(item => (
+                                        <button
+                                            key={item.id}
+                                            onClick={() => nav.go('followups')}
+                                            style={{ display: 'flex', alignItems: 'flex-start', gap: 9, padding: '10px 2px', border: 'none', background: 'none', borderBottom: '1px solid var(--border-subtle)', textAlign: 'left', cursor: 'pointer', width: '100%' }}
+                                        >
+                                            <span className="ws-search-result-icon" style={{ width: 26, height: 26, flex: '0 0 auto' }}><Icon name="followups" size={13} /></span>
+                                            <span style={{ flex: 1, minWidth: 0 }}>
+                                                <span style={{ display: 'block', fontSize: 12.5, fontWeight: 600 }}>{item.title}</span>
+                                                <span style={{ display: 'block', fontSize: 10.5, color: 'var(--text-tertiary)', marginTop: 2 }}>{item.entityTitle} · {formatDateTime(item.dueAt)}</span>
+                                            </span>
+                                            {item.overdue && <Badge tone="red">Overdue</Badge>}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </SectionCard>
+
                         <SectionCard
                             title="My tasks"
                             description="Assigned to you and still open."

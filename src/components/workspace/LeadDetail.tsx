@@ -2,11 +2,12 @@ import React, { useState } from 'react';
 import type { LeadActivityType } from '../../db';
 import { archiveLead, addLeadActivity, deleteLead, getLead, listLeadActivities, listLeadStages, moveLeadStage, setLeadNextFollowUp } from '../../services/leads';
 import { getTagsForEntity, getTagSuggestions } from '../../services/tags';
+import { listProjectsForLead } from '../../services/projects';
 import { formatDate, formatDateTime, fromDatetimeLocal, toDatetimeLocal } from '../../services/validation';
 import { toErrorMessage } from '../../services/errors';
 import type { WorkspaceNav } from '../../types/workspace';
 import { useAuth } from '../../context/AuthContext';
-import { Avatar, Badge, Button, ConfirmDialog, IconButton, SectionCard } from '../ui/Misc';
+import { Avatar, Badge, Button, ConfirmDialog, EmptyState, IconButton, SectionCard } from '../ui/Misc';
 import { Icon } from '../ui/Icon';
 import { Field, Select, TextArea, TextInput } from '../ui/Form';
 import { useToast } from '../ui/Toast';
@@ -14,6 +15,7 @@ import { MetaItem, PriorityBadge, Timeline, formatMoney } from './shared';
 import { useAsyncData } from './useAsyncData';
 import { LeadForm } from './LeadForm';
 import { EntityNotes } from './EntityNotes';
+import { EntityFollowUps } from './EntityFollowUps';
 
 interface LeadDetailProps {
     workspaceId: string;
@@ -45,14 +47,15 @@ export const LeadDetail: React.FC<LeadDetailProps> = ({ workspaceId, leadId, nav
     const [followUp, setFollowUp] = useState('');
 
     const { data, loading, error, reload } = useAsyncData(async () => {
-        const [lead, activities, tags, stages, tagSuggestions] = await Promise.all([
+        const [lead, activities, tags, stages, tagSuggestions, projects] = await Promise.all([
             getLead(leadId),
             listLeadActivities(leadId),
             getTagsForEntity('lead', leadId),
             listLeadStages(workspaceId),
             getTagSuggestions(workspaceId),
+            listProjectsForLead(leadId).catch(() => []),
         ]);
-        return { lead, activities, tags, stages, tagSuggestions };
+        return { lead, activities, tags, stages, tagSuggestions, projects };
     }, [workspaceId, leadId]);
 
     const lead = data?.lead;
@@ -208,6 +211,34 @@ export const LeadDetail: React.FC<LeadDetailProps> = ({ workspaceId, leadId, nav
                                 entries={activityEntries(data.activities, members)}
                             />
                         </SectionCard>
+
+                        <SectionCard
+                            title="Projects"
+                            description={data.projects.length ? `${data.projects.length} delivery project${data.projects.length === 1 ? '' : 's'} linked to this lead` : 'Connect this opportunity to delivery work.'}
+                        >
+                            {data.projects.length === 0 ? (
+                                <EmptyState compact icon="projects" title="No projects linked" description="Open a project and link this lead from the project page." />
+                            ) : (
+                                data.projects.map(project => (
+                                    <div key={project.id} className="ws-user-row">
+                                        <span className="ws-search-result-icon" style={{ width: 30, height: 30 }}><Icon name="projects" size={14} /></span>
+                                        <button className="ws-user-info" style={{ border: 'none', background: 'none', textAlign: 'left', padding: 0, cursor: 'pointer' }} onClick={() => nav.openProject(project.id)}>
+                                            <div className="ws-user-name">{project.name}</div>
+                                            <div className="ws-user-email">{project.identifier} · {project.status.replace(/_/g, ' ')}</div>
+                                        </button>
+                                        <IconButton icon="arrow-right" label="Open project" onClick={() => nav.openProject(project.id)} />
+                                    </div>
+                                ))
+                            )}
+                        </SectionCard>
+
+                        <EntityFollowUps
+                            workspaceId={lead.workspaceId}
+                            entityType="lead"
+                            entityId={lead.id}
+                            entityLabel={lead.name}
+                            onChanged={() => void reload()}
+                        />
 
                         <EntityNotes workspaceId={lead.workspaceId} entityType="lead" entityId={lead.id} nav={nav} />
                     </div>

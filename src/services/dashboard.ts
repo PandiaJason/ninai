@@ -3,6 +3,7 @@ import {
     type Lead,
     type LeadStage,
     type Note,
+    type Project,
     type Task,
 } from '../db';
 import { requireUser } from './auth';
@@ -10,6 +11,7 @@ import { assertWorkspaceAccess } from './permissions';
 import { getCalendarItems, type CalendarItem } from './calendar';
 import { listRecentNotes } from './notes';
 import { listActivities, type ActivityWithUser } from './activity';
+import { listFollowUps, type FollowUpWithMeta } from './followUps';
 
 export interface DashboardStats {
     totalLeads: number;
@@ -21,6 +23,9 @@ export interface DashboardStats {
     overdueTasks: number;
     upcomingDeadlines: number;
     myOpenTasks: number;
+    pendingFollowUps: number;
+    overdueFollowUps: number;
+    activeProjects: number;
 }
 
 export interface DashboardLead extends Lead {
@@ -32,10 +37,17 @@ export interface DashboardTask extends Task {
     assigneeName?: string;
 }
 
+export interface DashboardProject extends Project {
+    ownerName: string;
+    ownerColor: string;
+}
+
 export interface DashboardData {
     stats: DashboardStats;
     recentLeads: DashboardLead[];
     myTasks: DashboardTask[];
+    myFollowUps: FollowUpWithMeta[];
+    projects: DashboardProject[];
     upcoming: CalendarItem[];
     recentNotes: Note[];
     activity: ActivityWithUser[];
@@ -50,11 +62,13 @@ export async function getDashboardData(workspaceId: string, userId: string): Pro
     const actor = await requireUser();
     await assertWorkspaceAccess(actor, workspaceId);
 
-    const [leads, stages, tasks, users] = await Promise.all([
+    const [leads, stages, tasks, users, workspaceProjects, followUps] = await Promise.all([
         db.leads.where('workspaceId').equals(workspaceId).toArray(),
         db.leadStages.where('workspaceId').equals(workspaceId).sortBy('order'),
         db.tasks.where('workspaceId').equals(workspaceId).toArray(),
         db.users.toArray(),
+        db.projects.where('workspaceId').equals(workspaceId).toArray(),
+        listFollowUps(workspaceId, { status: 'pending', limit: 50 }),
     ]);
 
     const activeLeads = leads.filter(l => !l.archived);
@@ -93,7 +107,25 @@ export async function getDashboardData(workspaceId: string, userId: string): Pro
         overdueTasks: overdue.length,
         upcomingDeadlines: upcomingTaskCount + upcomingFollowUps,
         myOpenTasks: pendingTasks.filter(t => t.assigneeId === userId).length,
+        pendingFollowUps: followUps.length,
+        overdueFollowUps: followUps.filter(item => item.overdue).length,
+        activeProjects: workspaceProjects.filter(project => !project.archived && project.status !== 'completed' && project.status !== 'cancelled').length,
     };
+
+    const activeProjects: DashboardProject[] = workspaceProjects
+        .filter(project => !project.archived && project.status !== 'completed' && project.status !== 'cancelled')
+        .sort((a, b) => b.updatedAt - a.updatedAt)
+        .slice(0, 4)
+        .map(project => ({
+            ...project,
+            ownerName: userMap.get(project.ownerId)?.name || 'Unassigned',
+            ownerColor: userMap.get(project.ownerId)?.avatarColor || '#8e8e93',
+        }));
+
+    const myFollowUps = followUps
+        .filter(item => item.assignedTo === userId)
+        .sort((a, b) => Number(b.overdue) - Number(a.overdue) || a.dueAt - b.dueAt)
+        .slice(0, 5);
 
     const recentLeads = activeLeads
         .sort((a, b) => b.createdAt - a.createdAt)
@@ -128,5 +160,5 @@ export async function getDashboardData(workspaceId: string, userId: string): Pro
         listActivities(workspaceId, 8),
     ]);
 
-    return { stats, recentLeads, myTasks, upcoming, recentNotes, activity };
+    return { stats, recentLeads, myTasks, myFollowUps, projects: activeProjects, upcoming, recentNotes, activity };
 }

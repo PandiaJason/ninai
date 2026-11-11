@@ -1,5 +1,10 @@
-import { app, BrowserWindow, session, Menu, MenuItem, clipboard, net, nativeImage, ipcMain, webContents } from 'electron';
+import { app, BrowserWindow, session, Menu, MenuItem, clipboard, net, nativeImage, ipcMain, webContents, dialog } from 'electron';
 import path from 'path';
+import fs from 'fs/promises';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 
 // Force app name to ensure consistent path
 app.setName('Ninai');
@@ -127,6 +132,82 @@ ipcMain.handle('hard-reset', async () => {
     } catch (err) {
         console.error('Main: Failed to clear storage:', err);
     }
+});
+
+// Write a workspace snapshot into a local folder and commit it to Git.
+ipcMain.handle('git-export-workspace', async (event, payload) => {
+    const json = typeof payload?.json === 'string' ? payload.json : '';
+    if (!json) throw new Error('No workspace snapshot was provided.');
+    const workspaceName = String(payload?.workspaceName || 'NINAI workspace');
+    const message = String(payload?.message || `NINAI snapshot ${new Date().toISOString()}`).slice(0, 240);
+
+    const parent = BrowserWindow.fromWebContents(event.sender) || undefined;
+    const selection = await dialog.showOpenDialog(parent, {
+        title: 'Choose a Git folder for the NINAI snapshot',
+        buttonLabel: 'Export here',
+        properties: ['openDirectory', 'createDirectory'],
+    });
+    if (selection.canceled || !selection.filePaths[0]) return { canceled: true };
+
+    const folder = selection.filePaths[0];
+    await fs.writeFile(path.join(folder, 'ninai-workspace.json'), json, 'utf8');
+    await fs.writeFile(path.join(folder, 'README.md'), [
+        `# ${workspaceName}`,
+        '',
+        'This folder is a NINAI workspace snapshot maintained as plain JSON in Git.',
+        '',
+        `Exported: ${new Date().toISOString()}`,
+        '',
+        'Restore it from NINAI → Settings → Versions & backup by downloading the JSON and importing it as a version.',
+        '',
+    ].join('\n'), 'utf8');
+
+    try {
+        await execFileAsync('git', ['--version']);
+    } catch {
+        return {
+            canceled: false,
+            path: folder,
+            committed: false,
+            gitAvailable: false,
+            message: 'Snapshot written. Git is not installed, so no commit was created.',
+        };
+    }
+
+    try {
+        await execFileAsync('git', ['rev-parse', '--is-inside-work-tree'], { cwd: folder });
+    } catch {
+        await execFileAsync('git', ['init'], { cwd: folder });
+    }
+
+    try {
+        await execFileAsync('git', ['config', 'user.name'], { cwd: folder });
+    } catch {
+        await execFileAsync('git', ['config', 'user.name', 'NINAI'], { cwd: folder });
+    }
+    try {
+        await execFileAsync('git', ['config', 'user.email'], { cwd: folder });
+    } catch {
+        await execFileAsync('git', ['config', 'user.email', 'ninai@local'], { cwd: folder });
+    }
+
+    await execFileAsync('git', ['add', '-A'], { cwd: folder });
+    let committed = false;
+    try {
+        await execFileAsync('git', ['commit', '-m', message], { cwd: folder });
+        committed = true;
+    } catch (error) {
+        const output = `${error?.stdout || ''} ${error?.stderr || ''} ${error?.message || ''}`;
+        if (!output.toLowerCase().includes('nothing to commit')) throw error;
+    }
+
+    return {
+        canceled: false,
+        path: folder,
+        committed,
+        gitAvailable: true,
+        message: committed ? 'Snapshot committed to Git.' : 'No changes to commit.',
+    };
 });
 
 // IPC Context Menu (For Webviews)

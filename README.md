@@ -226,6 +226,10 @@ This is expected without an Apple Developer certificate. The app will still run 
 
 ---
 
+## Workspace, backups and packaging
+
+Projects, unified follow-ups, version history, cloud backup, Git export and the multi-OS build workflow are documented in [docs/WORKSPACE.md](docs/WORKSPACE.md).
+
 ## Contributing
 
 1. Fork the repository

@@ -139,6 +139,7 @@ export async function deleteWorkspace(workspaceId: string): Promise<void> {
         db.projects, db.projectMembers, db.projectLeads, db.projectMilestones, db.tasks,
         db.subtasks, db.taskComments, db.calendarEvents, db.tags, db.recordTags,
         db.noteLinks, db.notifications, db.activities, db.notes, db.folders,
+        db.followUps, db.workspaceVersions, db.syncState,
     ], async () => {
         await db.workspaces.delete(workspaceId);
         await db.workspaceMembers.where('workspaceId').equals(workspaceId).delete();
@@ -166,6 +167,9 @@ export async function deleteWorkspace(workspaceId: string): Promise<void> {
         await db.activities.where('workspaceId').equals(workspaceId).delete();
         await db.notes.where('workspaceId').equals(workspaceId).delete();
         await db.folders.where('workspaceId').equals(workspaceId).delete();
+        await db.followUps.where('workspaceId').equals(workspaceId).delete();
+        await db.workspaceVersions.where('workspaceId').equals(workspaceId).delete();
+        await db.syncState.where('workspaceId').equals(workspaceId).delete();
     });
 
     if (getStoredWorkspaceId() === workspaceId) storeWorkspaceId(DEFAULT_WORKSPACE_ID);
@@ -260,7 +264,9 @@ export interface WorkspaceStats {
     folders: number;
     leads: number;
     leadActivities: number;
+    projects: number;
     tasks: number;
+    followUps: number;
     events: number;
     members: number;
     activities: number;
@@ -269,17 +275,19 @@ export interface WorkspaceStats {
 export async function getWorkspaceStats(workspaceId: string): Promise<WorkspaceStats> {
     const actor = await requireUser();
     await assertWorkspaceAccess(actor, workspaceId);
-    const [notes, folders, leads, leadActivities, tasks, events, members, activities] = await Promise.all([
+    const [notes, folders, leads, leadActivities, projects, tasks, followUps, events, members, activities] = await Promise.all([
         db.notes.where('workspaceId').equals(workspaceId).count(),
         db.folders.where('workspaceId').equals(workspaceId).count(),
         db.leads.where('workspaceId').equals(workspaceId).count(),
         db.leadActivities.where('workspaceId').equals(workspaceId).count(),
+        db.projects.where('workspaceId').equals(workspaceId).count(),
         db.tasks.where('workspaceId').equals(workspaceId).count(),
+        db.followUps.where('workspaceId').equals(workspaceId).count(),
         db.calendarEvents.where('workspaceId').equals(workspaceId).count(),
         db.workspaceMembers.where('workspaceId').equals(workspaceId).count(),
         db.activities.where('workspaceId').equals(workspaceId).count(),
     ]);
-    return { notes, folders, leads, leadActivities, tasks, events, members, activities };
+    return { notes, folders, leads, leadActivities, projects, tasks, followUps, events, members, activities };
 }
 
 export async function exportWorkspaceJson(workspaceId: string): Promise<string> {
@@ -296,6 +304,20 @@ export async function exportWorkspaceJson(workspaceId: string): Promise<string> 
     const members = await db.workspaceMembers.where('workspaceId').equals(workspaceId).toArray();
     const activities = await db.activities.where('workspaceId').equals(workspaceId).toArray();
     const tags = await db.tags.where('workspaceId').equals(workspaceId).toArray();
+    const projects = await db.projects.where('workspaceId').equals(workspaceId).toArray();
+    const projectIds = projects.map(project => project.id);
+    const taskIds = tasks.map(task => task.id);
+    const [projectMembers, projectLeads, projectMilestones, followUps, subtasks, taskComments, recordTags, noteLinks, notifications] = await Promise.all([
+        projectIds.length ? db.projectMembers.where('projectId').anyOf(projectIds).toArray() : Promise.resolve([]),
+        projectIds.length ? db.projectLeads.where('projectId').anyOf(projectIds).toArray() : Promise.resolve([]),
+        db.projectMilestones.where('workspaceId').equals(workspaceId).toArray(),
+        db.followUps.where('workspaceId').equals(workspaceId).toArray(),
+        taskIds.length ? db.subtasks.where('taskId').anyOf(taskIds).toArray() : Promise.resolve([]),
+        taskIds.length ? db.taskComments.where('taskId').anyOf(taskIds).toArray() : Promise.resolve([]),
+        db.recordTags.where('workspaceId').equals(workspaceId).toArray(),
+        db.noteLinks.where('workspaceId').equals(workspaceId).toArray(),
+        db.notifications.where('workspaceId').equals(workspaceId).toArray(),
+    ]);
 
     return JSON.stringify({
         app: 'NINAI',
@@ -307,9 +329,19 @@ export async function exportWorkspaceJson(workspaceId: string): Promise<string> 
         folders,
         leads,
         leadActivities,
+        projects,
+        projectMembers,
+        projectLeads,
+        projectMilestones,
         tasks,
+        subtasks,
+        taskComments,
+        followUps,
         calendarEvents,
         tags,
+        recordTags,
+        noteLinks,
+        notifications,
         activities,
     }, null, 2);
 }

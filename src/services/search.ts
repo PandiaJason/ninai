@@ -2,7 +2,7 @@ import { db } from '../db';
 import { requireUser } from './auth';
 import { assertWorkspaceAccess } from './permissions';
 
-export type SearchType = 'lead' | 'task' | 'note' | 'folder';
+export type SearchType = 'lead' | 'project' | 'followup' | 'task' | 'note' | 'folder';
 
 export interface SearchResult {
     type: SearchType;
@@ -57,6 +57,39 @@ export async function globalSearch(
             title: lead.name,
             subtitle: [lead.company, lead.email, lead.phone].filter(Boolean).join(' · ') || 'Lead',
             updatedAt: lead.updatedAt,
+        }));
+    }
+
+    if (include('project')) {
+        const projects = await db.projects.where('workspaceId').equals(workspaceId).toArray();
+        const matched = projects
+            .filter(p => !p.archived && (
+                matches(p.name, term) || matches(p.description, term) ||
+                matches(p.identifier, term) || (p.objectives || []).some(objective => matches(objective, term))
+            ))
+            .sort((a, b) => b.updatedAt - a.updatedAt)
+            .slice(0, limitPerType);
+        matched.forEach(project => results.push({
+            type: 'project',
+            id: project.id,
+            title: project.name,
+            subtitle: `${project.identifier} · ${project.status.replace(/_/g, ' ')}`,
+            updatedAt: project.updatedAt,
+        }));
+    }
+
+    if (include('followup')) {
+        const followUps = await db.followUps.where('workspaceId').equals(workspaceId).toArray();
+        const matched = followUps
+            .filter(item => matches(item.title, term) || matches(item.notes, term) || matches(item.outcome, term))
+            .sort((a, b) => a.dueAt - b.dueAt)
+            .slice(0, limitPerType);
+        matched.forEach(item => results.push({
+            type: 'followup',
+            id: item.id,
+            title: item.title,
+            subtitle: `${item.status} · due ${new Date(item.dueAt).toLocaleDateString('en-US')}`,
+            updatedAt: item.updatedAt,
         }));
     }
 

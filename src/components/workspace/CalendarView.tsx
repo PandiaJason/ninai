@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import type { CalendarEventType, Lead } from '../../db';
+import type { CalendarEventType, Lead, Project } from '../../db';
 import {
     createCalendarEvent,
     deleteCalendarEvent,
@@ -11,6 +11,7 @@ import {
     type CalendarItem,
 } from '../../services/calendar';
 import { listLeads } from '../../services/leads';
+import { listProjects } from '../../services/projects';
 import {
     addDays,
     dateKey,
@@ -46,6 +47,7 @@ interface EventFormState {
     endAt: string;
     allDay: boolean;
     leadId: string;
+    projectId: string;
 }
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -59,6 +61,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ workspaceId, nav }) 
     const [editingId, setEditingId] = useState<string | null>(null);
     const [form, setForm] = useState<EventFormState>(() => emptyEventForm(dateKey(new Date())));
     const [leads, setLeads] = useState<Lead[]>([]);
+    const [projects, setProjects] = useState<Project[]>([]);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
     const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -108,8 +111,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ workspaceId, nav }) 
         setForm(emptyEventForm(dayKey || selectedKey));
         setFormOpen(true);
 
-        void listLeads(workspaceId)
-            .then(workspaceLeads => setLeads(workspaceLeads))
+        void Promise.all([listLeads(workspaceId), listProjects(workspaceId)])
+            .then(([workspaceLeads, workspaceProjects]) => {
+                setLeads(workspaceLeads);
+                setProjects(workspaceProjects.filter(project => !project.archived));
+            })
             .catch(e => setError(toErrorMessage(e)));
     };
 
@@ -120,11 +126,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ workspaceId, nav }) 
         }
         try {
             setError('');
-            const [event, workspaceLeads] = await Promise.all([
+            const [event, workspaceLeads, workspaceProjects] = await Promise.all([
                 getCalendarEvent(item.id),
                 listLeads(workspaceId),
+                listProjects(workspaceId),
             ]);
             setLeads(workspaceLeads);
+            setProjects(workspaceProjects.filter(project => !project.archived));
             setEditingId(event.id);
             setForm({
                 title: event.title,
@@ -135,6 +143,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ workspaceId, nav }) 
                 endAt: toDatetimeLocal(event.endAt),
                 allDay: event.allDay === 1,
                 leadId: event.leadId || '',
+                projectId: event.projectId || '',
             });
             setFormOpen(true);
         } catch (e) {
@@ -143,9 +152,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ workspaceId, nav }) 
     };
 
     const navigateEntity = (item: CalendarItem) => {
-        if (!item.entityId) return;
-        if (item.entityType === 'task') nav.openTask(item.entityId);
-        else if (item.entityType === 'lead') nav.openLead(item.entityId);
+        if (item.entityId && item.entityType === 'task') nav.openTask(item.entityId);
+        else if (item.entityId && item.entityType === 'lead') nav.openLead(item.entityId);
+        else if (item.entityId && item.entityType === 'project') nav.openProject(item.entityId);
+        else if (item.source === 'followup') nav.go('followups');
     };
 
     const saveEvent = async (event: React.FormEvent) => {
@@ -164,6 +174,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ workspaceId, nav }) 
                 endAt: form.allDay ? endOfDay(new Date(startAt)).getTime() : endAt,
                 allDay: form.allDay,
                 leadId: form.leadId || null,
+                projectId: form.projectId || null,
             };
             if (editingId) await updateCalendarEvent(editingId, input);
             else await createCalendarEvent(workspaceId, input);
@@ -410,6 +421,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ workspaceId, nav }) 
                                 {leads.map(lead => <option key={lead.id} value={lead.id}>{lead.name}{lead.company ? ` · ${lead.company}` : ''}</option>)}
                             </Select>
                         </Field>
+                        <Field label="Related project" htmlFor="event-project">
+                            <Select id="event-project" value={form.projectId} onChange={e => setForm(prev => ({ ...prev, projectId: e.target.value }))}>
+                                <option value="">No project</option>
+                                {projects.map(project => <option key={project.id} value={project.id}>{project.name} · {project.identifier}</option>)}
+                            </Select>
+                        </Field>
                     </div>
                     <Field label="Description" htmlFor="event-description">
                         <TextArea id="event-description" value={form.description} onChange={e => setForm(prev => ({ ...prev, description: e.target.value }))} placeholder="Agenda, preparation or outcome." />
@@ -448,5 +465,6 @@ function emptyEventForm(dayKey: string): EventFormState {
         endAt: `${dayKey}T10:00`,
         allDay: false,
         leadId: '',
+        projectId: '',
     };
 }

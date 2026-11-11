@@ -8,6 +8,8 @@ import { useDebouncedValue, useAsyncData } from './useAsyncData';
 const FILTERS: { id: SearchType | 'all'; label: string }[] = [
     { id: 'all', label: 'All' },
     { id: 'lead', label: 'Leads' },
+    { id: 'project', label: 'Projects' },
+    { id: 'followup', label: 'Follow-ups' },
     { id: 'task', label: 'Tasks' },
     { id: 'note', label: 'Notes' },
     { id: 'folder', label: 'Folders' },
@@ -15,6 +17,8 @@ const FILTERS: { id: SearchType | 'all'; label: string }[] = [
 
 const TYPE_META: Record<SearchType, { icon: IconName; label: string }> = {
     lead: { icon: 'crm', label: 'Lead' },
+    project: { icon: 'projects', label: 'Project' },
+    followup: { icon: 'followups', label: 'Follow-up' },
     task: { icon: 'tasks', label: 'Task' },
     note: { icon: 'notes', label: 'Note' },
     folder: { icon: 'folder', label: 'Folder' },
@@ -66,6 +70,8 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ open, workspaceId, n
     const choose = (result: SearchResult) => {
         onClose();
         if (result.type === 'lead') nav.openLead(result.id);
+        else if (result.type === 'project') nav.openProject(result.id);
+        else if (result.type === 'followup') nav.go('followups');
         else if (result.type === 'task') nav.openTask(result.id);
         else if (result.type === 'note') nav.openNote(result.id);
         else nav.go('notes');

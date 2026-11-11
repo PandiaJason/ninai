@@ -170,7 +170,7 @@ export const ToolView = forwardRef<ToolViewHandle, ToolViewProps>(({ tool, onMax
                     ref={webviewRef}
                     src={tool.url}
                     className="tool-frame"
-                    allowpopups={true}
+                    allowpopups={'true' as unknown as boolean}
                     // @ts-ignore - webview types
                     partition={`persist:${tool.id} `} // Unique partition per tool saves login state
                     useragent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36"

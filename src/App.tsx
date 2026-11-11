@@ -10,13 +10,15 @@ import { LoginScreen } from './components/auth/LoginScreen';
 import { useAuth } from './context/AuthContext';
 import { DashboardView } from './components/workspace/DashboardView';
 import { CRMView } from './components/workspace/CRMView';
+import { ProjectsView } from './components/workspace/ProjectsView';
+import { FollowUpsView } from './components/workspace/FollowUpsView';
 import { TasksView } from './components/workspace/TasksView';
 import { CalendarView } from './components/workspace/CalendarView';
 import { SettingsView } from './components/workspace/SettingsView';
 import { GlobalSearch } from './components/workspace/GlobalSearch';
 import type { ModuleId, WorkspaceNav } from './types/workspace';
 
-const MODULE_IDS: ModuleId[] = ['dashboard', 'crm', 'tasks', 'notes', 'calendar', 'settings', 'tools'];
+const MODULE_IDS: ModuleId[] = ['dashboard', 'crm', 'projects', 'followups', 'tasks', 'notes', 'calendar', 'settings', 'tools'];
 
 function readModule(): ModuleId {
     const saved = localStorage.getItem('ninai_active_module') as ModuleId | null;
@@ -73,6 +75,7 @@ function App() {
     // --- Workspace Navigation ---
     const [activeModule, setActiveModule] = useState<ModuleId>(readModule);
     const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+    const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
     const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
     const [externalNoteId, setExternalNoteId] = useState<string | null>(null);
     const [searchOpen, setSearchOpen] = useState(false);
@@ -84,18 +87,27 @@ function App() {
     const go = useCallback((module: ModuleId) => {
         setActiveModule(module);
         setSelectedLeadId(null);
+        setSelectedProjectId(null);
         setSelectedTaskId(null);
     }, []);
 
     const nav = useMemo<WorkspaceNav>(() => ({
         go,
         openLead: (leadId) => {
+            setSelectedProjectId(null);
             setSelectedTaskId(null);
             setSelectedLeadId(leadId);
             setActiveModule('crm');
         },
+        openProject: (projectId) => {
+            setSelectedLeadId(null);
+            setSelectedTaskId(null);
+            setSelectedProjectId(projectId);
+            setActiveModule('projects');
+        },
         openTask: (taskId) => {
             setSelectedLeadId(null);
+            setSelectedProjectId(null);
             setSelectedTaskId(taskId);
             setActiveModule('tasks');
         },
@@ -132,6 +144,7 @@ function App() {
     useEffect(() => {
         if (prevWorkspaceId.current && prevWorkspaceId.current !== workspace?.id) {
             setSelectedLeadId(null);
+            setSelectedProjectId(null);
             setSelectedTaskId(null);
             setExternalNoteId(null);
             setActiveModule(module => (module === 'tools' ? module : 'dashboard'));
@@ -228,6 +241,18 @@ function App() {
                         nav={nav}
                     />
                 );
+            case 'projects':
+                return (
+                    <ProjectsView
+                        workspaceId={workspace.id}
+                        userId={user.id}
+                        selectedProjectId={selectedProjectId}
+                        onCloseProject={() => setSelectedProjectId(null)}
+                        nav={nav}
+                    />
+                );
+            case 'followups':
+                return <FollowUpsView workspaceId={workspace.id} userId={user.id} nav={nav} />;
             case 'tasks':
                 return (
                     <TasksView
