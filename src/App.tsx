@@ -17,10 +17,12 @@ import { FollowUpsView } from './components/workspace/FollowUpsView';
 import { TasksView } from './components/workspace/TasksView';
 import { CalendarView } from './components/workspace/CalendarView';
 import { SettingsView } from './components/workspace/SettingsView';
+import { GmailView } from './components/workspace/GmailView';
+import { countPendingGmailMessages } from './services/gmailSync';
 import { GlobalSearch } from './components/workspace/GlobalSearch';
 import type { ModuleId, WorkspaceNav } from './types/workspace';
 
-const MODULE_IDS: ModuleId[] = ['today', 'dashboard', 'crm', 'institutions', 'analytics', 'projects', 'followups', 'tasks', 'notes', 'calendar', 'settings', 'tools'];
+const MODULE_IDS: ModuleId[] = ['today', 'dashboard', 'crm', 'institutions', 'analytics', 'projects', 'followups', 'tasks', 'notes', 'calendar', 'settings', 'gmail', 'tools'];
 
 function readModule(): ModuleId {
     const saved = localStorage.getItem('ninai_active_module') as ModuleId | null;
@@ -81,10 +83,21 @@ function App() {
     const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
     const [externalNoteId, setExternalNoteId] = useState<string | null>(null);
     const [searchOpen, setSearchOpen] = useState(false);
+    const [gmailPending, setGmailPending] = useState(0);
 
     useEffect(() => {
         localStorage.setItem('ninai_active_module', activeModule);
     }, [activeModule]);
+
+    // Keep the Gmail badge in the sidebar in step with the review queue.
+    useEffect(() => {
+        if (!workspace) return;
+        let cancelled = false;
+        void countPendingGmailMessages(workspace.id)
+            .then(count => { if (!cancelled) setGmailPending(count); })
+            .catch(() => { if (!cancelled) setGmailPending(0); });
+        return () => { cancelled = true; };
+    }, [workspace?.id, activeModule]);
 
     const go = useCallback((module: ModuleId) => {
         setActiveModule(module);
@@ -277,6 +290,8 @@ function App() {
                 return <CalendarView workspaceId={workspace.id} nav={nav} />;
             case 'settings':
                 return <SettingsView />;
+            case 'gmail':
+                return <GmailView workspaceId={workspace.id} nav={nav} />;
             case 'notes':
             case 'tools':
             default:
@@ -299,6 +314,7 @@ function App() {
                     onOpenSearch={() => setSearchOpen(true)}
                     workspaceName={workspace.name}
                     onSignOut={() => void logout()}
+                    gmailPending={gmailPending}
                 />
             }
             insightPanel={(

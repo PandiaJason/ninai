@@ -10,6 +10,7 @@ export type ModuleId =
     | 'notes'
     | 'calendar'
     | 'settings'
+    | 'gmail'
     | 'tools';
 
 export interface WorkspaceNav {

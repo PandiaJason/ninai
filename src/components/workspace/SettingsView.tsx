@@ -25,6 +25,12 @@ import {
 } from '../../services/versions';
 import { exportWorkspaceToGit } from '../../services/git';
 import {
+    connectGmail,
+    disconnectGmail,
+    getGmailConnection,
+} from '../../services/gmailSync';
+import { buildGoogleAuthUrl, createPkcePair } from '../../services/gmail';
+import {
     downloadCloudBackup,
     getCloudBackupConfig,
     getSyncState,
@@ -43,13 +49,14 @@ import { Field, Select, TextArea, TextInput } from '../ui/Form';
 import { useToast } from '../ui/Toast';
 import { useAsyncData } from './useAsyncData';
 
-type SettingsSection = 'profile' | 'workspace' | 'people' | 'pipeline' | 'data' | 'versions';
+type SettingsSection = 'profile' | 'workspace' | 'people' | 'pipeline' | 'gmail' | 'data' | 'versions';
 
 const SECTIONS: { id: SettingsSection; label: string; icon: IconName }[] = [
     { id: 'profile', label: 'Profile', icon: 'user' },
     { id: 'workspace', label: 'Workspace', icon: 'building' },
     { id: 'people', label: 'People', icon: 'users' },
     { id: 'pipeline', label: 'Pipeline', icon: 'kanban' },
+    { id: 'gmail', label: 'Gmail', icon: 'mail' },
     { id: 'data', label: 'Data', icon: 'file' },
     { id: 'versions', label: 'Versions & backup', icon: 'history' },
 ];
@@ -130,6 +137,10 @@ export const SettingsView: React.FC = () => {
                                 loading={loading}
                                 onChanged={() => void reload()}
                             />
+                        )}
+
+                        {section === 'gmail' && workspaceId && (
+                            <GmailSection workspaceId={workspaceId} onChanged={() => void reload()} />
                         )}
 
                         {section === 'data' && (
@@ -1066,6 +1077,130 @@ const DataSection: React.FC<{
         </SectionCard>
     </>
 );
+
+/* ------------------------------------------------------------------ */
+/* Gmail                                                                */
+/* ------------------------------------------------------------------ */
+
+const GMAIL_CLIENT_ID_KEY = 'ninai_gmail_client_id';
+
+const GmailSection: React.FC<{ workspaceId: string; onChanged: () => void }> = ({ workspaceId, onChanged }) => {
+    const toast = useToast();
+    const [clientId, setClientId] = useState(() => localStorage.getItem(GMAIL_CLIENT_ID_KEY) || '');
+    const [connecting, setConnecting] = useState(false);
+    const [connection, setConnection] = useState<Awaited<ReturnType<typeof getGmailConnection>>>(undefined);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        let cancelled = false;
+        void getGmailConnection(workspaceId)
+            .then(value => { if (!cancelled) setConnection(value); })
+            .catch(() => { if (!cancelled) setConnection(undefined); })
+            .finally(() => { if (!cancelled) setLoading(false); });
+        return () => { cancelled = true; };
+    }, [workspaceId]);
+
+    const saveClientId = () => {
+        const value = clientId.trim();
+        if (value) localStorage.setItem(GMAIL_CLIENT_ID_KEY, value);
+        else localStorage.removeItem(GMAIL_CLIENT_ID_KEY);
+        setClientId(value);
+    };
+
+    const connect = async () => {
+        setError('');
+        const api = window.electronAPI?.gmailOAuth;
+        if (!api) {
+            setError('Google sign-in needs the Ninai desktop app. Open the project with Electron and try again.');
+            return;
+        }
+        if (!clientId.trim()) {
+            setError('Add a Google OAuth desktop client id first.');
+            return;
+        }
+        setConnecting(true);
+        try {
+            saveClientId();
+            const { verifier, challenge } = await createPkcePair();
+            const state = crypto.randomUUID();
+            const { requestId, redirectUri } = await api.start();
+            const url = buildGoogleAuthUrl({ clientId: clientId.trim(), redirectUri, state, codeChallenge: challenge });
+            await window.electronAPI?.openExternal?.(url);
+            const code = await api.complete(requestId);
+            const created = await connectGmail({ workspaceId, clientId: clientId.trim(), code, codeVerifier: verifier, redirectUri });
+            setConnection(created);
+            toast.success(`Connected ${created.email}.`);
+            onChanged();
+        } catch (e) {
+            setError(toErrorMessage(e));
+        } finally {
+            setConnecting(false);
+        }
+    };
+
+    const disconnect = async () => {
+        setConnecting(true);
+        try {
+            await disconnectGmail(workspaceId);
+            setConnection(undefined);
+            toast.success('Gmail disconnected.');
+            onChanged();
+        } catch (e) {
+            setError(toErrorMessage(e));
+        } finally {
+            setConnecting(false);
+        }
+    };
+
+    return (
+        <>
+            <SectionCard
+                title="Google OAuth client"
+                description="Ninai talks to Gmail through Google's OAuth flow. Create a Desktop app client in Google Cloud Console, enable the Gmail API and paste the client id here."
+            >
+                <form
+                    onSubmit={event => { event.preventDefault(); saveClientId(); toast.success('Client id saved.'); }}
+                    style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}
+                >
+                    <div style={{ flex: '1 1 320px' }}>
+                        <Field label="Client id" htmlFor="gmail-client-id" hint="Looks like 1234567890-abc.apps.googleusercontent.com">
+                            <TextInput id="gmail-client-id" value={clientId} onChange={event => setClientId(event.target.value)} placeholder="Desktop app client id" />
+                        </Field>
+                    </div>
+                    <Button type="submit" icon="check">Save</Button>
+                </form>
+                <div className="ws-info-list" style={{ marginTop: 14 }}>
+                    <div className="ws-info-row"><Icon name="lock" size={14} /><span className="ws-info-label">Access</span><span className="ws-info-value">Read-only. Ninai can list and read your mail, nothing else.</span></div>
+                    <div className="ws-info-row"><Icon name="mail" size={14} /><span className="ws-info-label">Scope</span><span className="ws-info-value">gmail.readonly, openid, email</span></div>
+                    <div className="ws-info-row"><Icon name="alert" size={14} /><span className="ws-info-label">Tokens</span><span className="ws-info-value">Stored locally in this browser profile and never leave this device.</span></div>
+                </div>
+            </SectionCard>
+
+            <SectionCard title="Connection" description="One Gmail account per workspace.">
+                {loading ? (
+                    <div className="ws-loading"><span className="ws-spinner" /><span>Checking connection…</span></div>
+                ) : connection ? (
+                    <>
+                        <div className="ws-info-list">
+                            <div className="ws-info-row"><Icon name="mail" size={14} /><span className="ws-info-label">Account</span><span className="ws-info-value">{connection.email}</span></div>
+                            <div className="ws-info-row"><Icon name="clock" size={14} /><span className="ws-info-label">Last sync</span><span className="ws-info-value">{connection.lastSyncedAt ? formatDateTime(connection.lastSyncedAt) : 'Never synced'}</span></div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+                            <Button variant="danger" icon="logout" onClick={() => void disconnect()} loading={connecting}>Disconnect</Button>
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <p className="ws-muted" style={{ marginTop: 0 }}>No Gmail account is connected to this workspace yet.</p>
+                        <Button variant="primary" icon="globe" onClick={() => void connect()} loading={connecting}>Connect Gmail</Button>
+                    </>
+                )}
+                {error && <div className="ws-form-error" style={{ marginTop: 12 }}>{error}</div>}
+            </SectionCard>
+        </>
+    );
+};
 
 function downloadJson(filename: string, json: string): void {
     const blob = new Blob([json], { type: 'application/json' });

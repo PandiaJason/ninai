@@ -1,8 +1,10 @@
-import { app, BrowserWindow, session, Menu, MenuItem, clipboard, net, nativeImage, ipcMain, webContents, dialog } from 'electron';
+import { app, BrowserWindow, session, Menu, MenuItem, clipboard, net, nativeImage, ipcMain, webContents, dialog, shell } from 'electron';
 import path from 'path';
 import fs from 'fs/promises';
+import http from 'http';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { randomUUID } from 'crypto';
 
 const execFileAsync = promisify(execFile);
 
@@ -245,6 +247,96 @@ ipcMain.handle('clipboard-read-extended', () => {
 ipcMain.handle('clipboard-write', (event, text) => {
     clipboard.writeText(text);
     return true;
+});
+
+/* ------------------------------------------------------------------ */
+/* External links + Google OAuth (loopback)                             */
+/* ------------------------------------------------------------------ */
+
+ipcMain.handle('open-external', async (_event, url) => {
+    const value = String(url || '');
+    if (!/^https?:\/\//i.test(value)) throw new Error('Only http(s) links can be opened.');
+    await shell.openExternal(value);
+    return true;
+});
+
+const gmailOauthRequests = new Map();
+
+function escapeHtml(value) {
+    return String(value || '').replace(/[&<>"']/g, char => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[char]));
+}
+
+/**
+ * Starts a one-shot loopback server so Google can hand the consent code back.
+ * Google desktop clients are allowed to redirect to 127.0.0.1 on any port.
+ */
+ipcMain.handle('gmail-oauth-start', async () => {
+    const requestId = randomUUID();
+    let resolvePending;
+    let rejectPending;
+    const promise = new Promise((resolve, reject) => {
+        resolvePending = resolve;
+        rejectPending = reject;
+    });
+
+    const server = http.createServer((request, response) => {
+        const url = new URL(request.url || '/', 'http://127.0.0.1');
+        const code = url.searchParams.get('code');
+        const error = url.searchParams.get('error');
+        if (!code && !error) {
+            response.writeHead(404, { 'Content-Type': 'text/plain' });
+            response.end('Not found');
+            return;
+        }
+        const title = error ? 'Google sign-in was not completed' : 'Ninai is connected to Gmail';
+        const detail = error
+            ? `Google returned: ${escapeHtml(error)}`
+            : 'You can close this tab and go back to Ninai.';
+        response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        response.end(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head>
+            <body style="font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;padding:48px;color:#1d1d1f">
+            <h2 style="font-size:20px;margin:0 0 8px">${title}</h2>
+            <p style="color:#5f5f66;margin:0">${detail}</p></body></html>`);
+
+        const pending = gmailOauthRequests.get(requestId);
+        if (pending) {
+            gmailOauthRequests.delete(requestId);
+            if (error) pending.reject(new Error(`Google sign-in failed: ${error}`));
+            else pending.resolve(code);
+        }
+        setTimeout(() => server.close(), 1000);
+    });
+
+    await new Promise((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(0, '127.0.0.1', resolve);
+    });
+
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+
+    const timer = setTimeout(() => {
+        if (!gmailOauthRequests.has(requestId)) return;
+        gmailOauthRequests.delete(requestId);
+        server.close();
+        rejectPending(new Error('Timed out waiting for the Google consent screen.'));
+    }, 5 * 60 * 1000);
+
+    gmailOauthRequests.set(requestId, {
+        promise,
+        resolve: value => { clearTimeout(timer); resolvePending(value); },
+        reject: error => { clearTimeout(timer); rejectPending(error); },
+    });
+
+    return { requestId, redirectUri: `http://127.0.0.1:${port}` };
+});
+
+ipcMain.handle('gmail-oauth-complete', async (_event, requestId) => {
+    const pending = gmailOauthRequests.get(requestId);
+    if (!pending) throw new Error('No pending Google sign-in.');
+    return pending.promise;
 });
 
 // Handle PDF Export

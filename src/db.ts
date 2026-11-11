@@ -389,6 +389,55 @@ export interface SyncState {
     updatedAt: number;
 }
 
+/** A Gmail account connected to a workspace, used to read learner emails. */
+export interface GmailConnection {
+    id: string;
+    workspaceId: string;
+    /** Gmail address of the connected account. */
+    email: string;
+    /** Google OAuth desktop client id used for the consent flow. */
+    clientId: string;
+    accessToken: string;
+    refreshToken: string;
+    /** Epoch ms when the access token expires. */
+    expiresAt: number;
+    scope: string;
+    lastSyncedAt?: number;
+    createdAt: number;
+    updatedAt: number;
+    createdBy: string;
+}
+
+/** What a learner email looks like once it has been read. */
+export type GmailSignal = 'challenge' | 'feedback' | 'question' | 'meeting' | 'other';
+export type GmailMessageStatus = 'new' | 'applied' | 'ignored';
+
+export interface GmailMessage {
+    id: string;
+    workspaceId: string;
+    connectionId: string;
+    /** Gmail's own message id, used to avoid ingesting the same mail twice. */
+    gmailId: string;
+    threadId?: string;
+    /** Matched learner record, when the sender is a known learner. */
+    leadId?: string;
+    from: string;
+    fromEmail: string;
+    to?: string;
+    subject: string;
+    snippet: string;
+    body: string;
+    receivedAt: number;
+    signal: GmailSignal;
+    /** 0..1 confidence for the detected signal. */
+    confidence: number;
+    /** JSON encoded extraction (track, rating, stuck category, questions…). */
+    extracted: string;
+    status: GmailMessageStatus;
+    appliedAt?: number;
+    createdAt: number;
+}
+
 /* ------------------------------------------------------------------ */
 /* Database                                                             */
 /* ------------------------------------------------------------------ */
@@ -443,9 +492,42 @@ export class NinaiDB extends Dexie {
     learnerFeedback!: Table<LearnerFeedback>;
     workspaceVersions!: Table<WorkspaceVersion>;
     syncState!: Table<SyncState>;
+    gmailConnections!: Table<GmailConnection>;
+    gmailMessages!: Table<GmailMessage>;
 
     constructor() {
         super('NinaiDB');
+
+        // Version 11: Gmail connection + learner mail inbox.
+        this.version(11).stores({
+            notes: 'id, folderId, title, updatedAt, loved, hasReminders, workspaceId, archived, [workspaceId+folderId], [workspaceId+updatedAt]',
+            folders: 'id, name, parentId, order, workspaceId',
+            users: 'id, &email, role, workspaceId, active',
+            workspaces: 'id, name, ownerId',
+            workspaceMembers: 'id, workspaceId, userId, [workspaceId+userId]',
+            leadStages: 'id, workspaceId, audience, order, [workspaceId+order], [workspaceId+audience]',
+            leads: 'id, workspaceId, audience, ownerId, stageId, priority, archived, createdAt, updatedAt, nextFollowUpAt, [workspaceId+archived], [workspaceId+audience], [workspaceId+stageId], [workspaceId+ownerId]',
+            leadActivities: 'id, workspaceId, leadId, userId, type, occurredAt, [leadId+occurredAt]',
+            projects: 'id, workspaceId, ownerId, status, priority, identifier, archived, createdAt, updatedAt, [workspaceId+status], [workspaceId+archived]',
+            projectMembers: 'id, projectId, userId, [projectId+userId]',
+            projectLeads: 'id, projectId, leadId, [projectId+leadId], [leadId+projectId]',
+            projectMilestones: 'id, projectId, dueDate, completed, [projectId+completed]',
+            tasks: 'id, workspaceId, projectId, leadId, assigneeId, status, priority, dueDate, createdAt, updatedAt, [projectId+status], [assigneeId+status], [workspaceId+status], [workspaceId+assigneeId], [workspaceId+dueDate]',
+            subtasks: 'id, taskId, order',
+            taskComments: 'id, taskId, userId, createdAt, [taskId+createdAt]',
+            calendarEvents: 'id, workspaceId, startAt, endAt, type, leadId, projectId, [workspaceId+startAt]',
+            tags: 'id, workspaceId, name, [workspaceId+name]',
+            recordTags: 'id, workspaceId, tagId, entityType, entityId, [entityType+entityId], [entityId+entityType]',
+            noteLinks: 'id, workspaceId, noteId, entityType, entityId, [entityType+entityId], [noteId+entityType]',
+            notifications: 'id, workspaceId, userId, read, createdAt, [userId+read]',
+            activities: 'id, workspaceId, entityType, entityId, userId, createdAt, [workspaceId+createdAt], [entityType+entityId]',
+            followUps: 'id, workspaceId, entityType, entityId, status, dueAt, assignedTo, createdBy, createdAt, updatedAt, [workspaceId+status], [workspaceId+dueAt], [workspaceId+assignedTo], [entityType+entityId]',
+            learnerFeedback: 'id, workspaceId, leadId, submittedAt, [workspaceId+submittedAt], [leadId+submittedAt]',
+            workspaceVersions: 'id, workspaceId, kind, createdBy, createdAt, [workspaceId+createdAt]',
+            syncState: 'id, workspaceId, provider, lastSyncedAt',
+            gmailConnections: 'id, workspaceId, email, lastSyncedAt',
+            gmailMessages: 'id, workspaceId, connectionId, gmailId, leadId, signal, status, receivedAt, [workspaceId+status], [workspaceId+receivedAt], [connectionId+gmailId]',
+        });
 
         // Version 10: ALGO learner / institution pipelines and structured learner feedback.
         this.version(10).stores({

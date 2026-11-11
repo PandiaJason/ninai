@@ -1661,4 +1661,143 @@
     .ws-module-inner { padding: 18px 14px 44px; }
 }
 
+/* Gmail -------------------------------------------------------------------- */
+
+.ws-gmail-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 12px;
+    margin-bottom: 14px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    background: var(--surface-low);
+    color: var(--text-secondary);
+    font-size: 11.5px;
+}
+
+.ws-gmail-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent-success);
+    flex: 0 0 auto;
+}
+
+.ws-gmail-connect-body {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.ws-gmail-connect-note {
+    margin: 0;
+    max-width: 560px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.55;
+}
+
+.ws-gmail-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ws-gmail-card {
+    padding: 14px 16px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 13px;
+    background: var(--surface-low);
+    box-shadow: var(--shadow-sm);
+}
+
+.ws-gmail-card.is-done { opacity: 0.72; }
+
+.ws-gmail-card-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.ws-gmail-card-title { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+.ws-gmail-card-title strong { font-size: 12.5px; font-weight: 650; color: var(--text-primary); }
+.ws-gmail-card-title span { margin-top: 1px; color: var(--text-tertiary); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-gmail-card-date { color: var(--text-tertiary); font-size: 10.5px; white-space: nowrap; }
+
+.ws-gmail-card-subject {
+    margin-top: 10px;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.ws-gmail-card-body {
+    margin: 4px 0 0;
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.55;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.ws-gmail-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+.ws-gmail-card-actions {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+    padding-top: 11px;
+    border-top: 1px solid var(--border-subtle);
+}
+
+.ws-gmail-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    color: var(--text-tertiary);
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.ws-gmail-field select {
+    height: 30px;
+    padding: 0 8px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 7px;
+    background: var(--surface-low);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 11.5px;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+.ws-gmail-card-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-tertiary);
+    font-size: 11px;
+}
+
+@media (max-width: 760px) {
+    .ws-gmail-card-head { flex-wrap: wrap; }
+    .ws-gmail-card-date { width: 100%; }
+}
+
 

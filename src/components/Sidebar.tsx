@@ -16,6 +16,7 @@ interface SidebarProps {
     onOpenSearch?: () => void;
     workspaceName?: string;
     onSignOut?: () => void;
+    gmailPending?: number;
 }
 
 const PRIMARY_MODULES: { id: ModuleId; label: string; icon: IconName }[] = [
@@ -31,6 +32,7 @@ const PRIMARY_MODULES: { id: ModuleId; label: string; icon: IconName }[] = [
 const SECONDARY_MODULES: { id: ModuleId; label: string; icon: IconName }[] = [
     { id: 'today', label: 'Today', icon: 'clock' },
     { id: 'followups', label: 'Follow-ups', icon: 'followups' },
+    { id: 'gmail', label: 'Gmail', icon: 'mail' },
     { id: 'analytics', label: 'Insights', icon: 'chart' },
     { id: 'notes', label: 'Notes', icon: 'notes' },
 ];
@@ -42,10 +44,11 @@ interface SidebarItemProps {
     active: boolean;
     onSelect: () => void;
     className?: string;
+    badge?: number;
     children?: React.ReactNode;
 }
 
-const SidebarItem: React.FC<SidebarItemProps> = ({ label, icon, active, onSelect, className = '', children }) => (
+const SidebarItem: React.FC<SidebarItemProps> = ({ label, icon, active, onSelect, className = '', badge, children }) => (
     <button
         type="button"
         className={`sidebar-item ${active ? 'active' : ''} ${className}`}
@@ -57,6 +60,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ label, icon, active, onSelect
             {children || <Icon name={icon} size={17} />}
         </span>
         <span className="sidebar-item-label">{label}</span>
+        {badge !== undefined && badge > 0 && <span className="sidebar-item-badge">{badge > 99 ? '99+' : badge}</span>}
     </button>
 );
 
@@ -71,6 +75,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     onOpenSearch,
     workspaceName,
     onSignOut,
+    gmailPending = 0,
 }) => {
     const [userName, setUserName] = useState(() => localStorage.getItem('ninai_username') || 'N');
     const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -259,6 +264,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             icon={module.icon}
                             active={activeModule === module.id}
                             onSelect={() => selectModule(module.id)}
+                            badge={module.id === 'gmail' ? gmailPending : undefined}
                         />
                     ))}
                 </div>

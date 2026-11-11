@@ -14,5 +14,10 @@ interface Window {
             gitAvailable?: boolean;
             message?: string;
         }>;
+        openExternal?(url: string): Promise<boolean>;
+        gmailOAuth?: {
+            start(): Promise<{ requestId: string; redirectUri: string }>;
+            complete(requestId: string): Promise<string>;
+        };
     };
 }
