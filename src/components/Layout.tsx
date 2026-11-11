@@ -12,10 +12,7 @@ interface LayoutProps {
     notesLocked?: boolean;
     // Hide the main content area while keeping it mounted.
     contentHidden?: boolean;
-    hideSidebarToggle?: boolean;
     // Controlled State
-    isSidebarOpen: boolean;
-    setSidebarOpen: (v: boolean) => void;
     isNotesOpen: boolean;
     setNotesOpen: (v: boolean) => void;
 }
@@ -25,8 +22,7 @@ export const Layout: React.FC<LayoutProps> = ({
     fullNotes = false,
     notesLocked = false,
     contentHidden = false,
-    hideSidebarToggle = false,
-    isSidebarOpen, setSidebarOpen, isNotesOpen, setNotesOpen
+    isNotesOpen, setNotesOpen
 }) => {
     // Default to 50% width to match "Split View" expectation
     const [panelWidth, setPanelWidth] = React.useState(() => {
@@ -116,19 +112,8 @@ export const Layout: React.FC<LayoutProps> = ({
     return (
         <div className={`app-layout ${isResizing ? 'resizing' : ''} ${zenMode ? 'zen-mode' : ''}`}>
             {!zenMode && (
-                <aside className={`layout-sidebar glass ${!isSidebarOpen ? 'collapsed' : ''}`}>
+                <aside className="layout-sidebar glass">
                     {sidebar}
-                    {!hideSidebarToggle && (
-                        <button
-                            className="sidebar-toggle"
-                            onClick={() => setSidebarOpen(!isSidebarOpen)}
-                            title={isSidebarOpen ? "Collapse Sidebar" : "Expand Sidebar"}
-                            aria-label={isSidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
-                            aria-expanded={isSidebarOpen}
-                        >
-                            {isSidebarOpen ? '«' : '»'}
-                        </button>
-                    )}
                 </aside>
             )}
 
