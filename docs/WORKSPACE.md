@@ -15,7 +15,7 @@ The primary database is never replaced by a cloud connection. Cloud and Git are 
 
 ## ALGO CRM
 
-The CRM is split into a learner activation pipeline and a separate institution pipeline, with structured learner feedback and a source-quality Insights view. See [ALGO-CRM.md](./ALGO-CRM.md) for stage definitions, activation rules, feedback fields, analytics and the current collaboration limits.
+The CRM is split into a learner activation pipeline and a separate institution pipeline, with structured learner feedback and a source-quality Insights view. See [ALGO-CRM.md](./ALGO-CRM.md) for stage definitions, activation rules, feedback fields, analytics and the current collaboration limits, and [ALGO-CRM-CONTEXT.md](./ALGO-CRM-CONTEXT.md) for the full development handoff, data model and file map.
 
 ## Projects
 

@@ -2,6 +2,8 @@
 
 The ALGO CRM is an activation and feedback system, not a generic sales pipeline. Signing up is not success. The first cohort succeeds when a learner attempts a challenge, comes back, and tells us what helped or blocked them.
 
+For the full implementation handoff — data model, activation rules, analytics definitions, file map, verification and known limitations — see [ALGO-CRM-CONTEXT.md](./ALGO-CRM-CONTEXT.md).
+
 ## Two pipelines
 
 | Learner stage | Meaning |
