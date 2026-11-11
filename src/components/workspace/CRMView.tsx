@@ -1,6 +1,15 @@
 import React, { useMemo, useState } from 'react';
-import type { Lead, Priority } from '../../db';
+import type { Lead, LeadAudience, LeadQuality, Priority } from '../../db';
 import { bulkArchiveLeads, bulkDeleteLeads, bulkMoveLeads, downloadLeadsCsv, exportLeadsCsv, listLeadStages, listLeads, moveLeadStage } from '../../services/leads';
+import {
+    LEAD_QUALITIES,
+    LEAD_QUALITY_LABEL,
+    LEAD_QUALITY_TONE,
+    LEAD_SOURCES,
+    normalizeSource,
+    sourceLabel,
+    stagesForAudience,
+} from '../../services/algo';
 import { getTagSuggestions } from '../../services/tags';
 import { useAuth } from '../../context/AuthContext';
 import { formatDate } from '../../services/validation';
@@ -34,10 +43,15 @@ export const CRMView: React.FC<CRMViewProps> = ({ workspaceId, userId, selectedL
     const { user, members } = useAuth();
     const toast = useToast();
     const [view, setView] = useState<ViewMode>(() => readStoredView('ninai_crm_view', ['kanban', 'table'], 'kanban'));
+    const [audience, setAudience] = useState<LeadAudience>(() => (
+        localStorage.getItem('ninai_crm_audience') === 'institution' ? 'institution' : 'learner'
+    ));
     const [search, setSearch] = useState('');
     const [stageFilter, setStageFilter] = useState('all');
     const [ownerFilter, setOwnerFilter] = useState('all');
     const [priorityFilter, setPriorityFilter] = useState<'all' | Priority>('all');
+    const [sourceFilter, setSourceFilter] = useState('all');
+    const [qualityFilter, setQualityFilter] = useState<'all' | LeadQuality | 'unassessed'>('all');
     const [showArchived, setShowArchived] = useState(false);
     const [sortKey, setSortKey] = useState<SortKey>('updated');
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
@@ -64,19 +78,38 @@ export const CRMView: React.FC<CRMViewProps> = ({ workspaceId, userId, selectedL
 
     const leads = data?.leads || [];
     const stages = data?.stages || [];
+    const audienceLeads = leads.filter(lead => (lead.audience || 'learner') === audience);
+    const audienceStages = stagesForAudience(stages, audience);
+    const isLearner = audience === 'learner';
+    const learnerCount = leads.filter(lead => (lead.audience || 'learner') === 'learner').length;
+    const institutionCount = leads.filter(lead => lead.audience === 'institution').length;
 
     const changeView = (next: ViewMode) => {
         setView(next);
         localStorage.setItem('ninai_crm_view', next);
     };
 
+    const changeAudience = (next: LeadAudience) => {
+        setAudience(next);
+        localStorage.setItem('ninai_crm_audience', next);
+        setStageFilter('all');
+        setSourceFilter('all');
+        setQualityFilter('all');
+        setPage(1);
+        setSelected(new Set());
+    };
+
     const filtered = useMemo(() => {
         const term = search.trim().toLowerCase();
-        let list = leads.filter(lead => {
-            if (term && ![lead.name, lead.company, lead.email, lead.phone, lead.industry, lead.source].some(value => (value || '').toLowerCase().includes(term))) return false;
+        let list = audienceLeads.filter(lead => {
+            if (term && ![lead.name, lead.company, lead.email, lead.phone, lead.industry, lead.source, lead.sourceDetail, lead.dropOffReason].some(value => (value || '').toLowerCase().includes(term))) return false;
             if (stageFilter !== 'all' && lead.stageId !== stageFilter) return false;
             if (ownerFilter !== 'all' && lead.ownerId !== ownerFilter) return false;
             if (priorityFilter !== 'all' && lead.priority !== priorityFilter) return false;
+            if (sourceFilter !== 'all' && (normalizeSource(lead.source) || 'unknown') !== sourceFilter) return false;
+            if (qualityFilter !== 'all') {
+                if (qualityFilter === 'unassessed' ? !!lead.quality : lead.quality !== qualityFilter) return false;
+            }
             return true;
         });
         list = [...list].sort((a, b) => {
@@ -87,7 +120,7 @@ export const CRMView: React.FC<CRMViewProps> = ({ workspaceId, userId, selectedL
             return (a.updatedAt - b.updatedAt) * direction;
         });
         return list;
-    }, [leads, search, stageFilter, ownerFilter, priorityFilter, sortKey, sortDir]);
+    }, [audienceLeads, search, stageFilter, ownerFilter, priorityFilter, sourceFilter, qualityFilter, sortKey, sortDir]);
 
     const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
     const currentPage = Math.min(page, pageCount);
@@ -173,23 +206,34 @@ export const CRMView: React.FC<CRMViewProps> = ({ workspaceId, userId, selectedL
         <div className="ws-module">
             <div className="ws-module-inner">
                 <PageHeader
-                    eyebrow="Customer relationships"
-                    title="CRM pipeline"
-                    subtitle={`${leads.length} lead${leads.length === 1 ? '' : 's'} in this workspace · drag cards between stages to move them.`}
+                    eyebrow="ALGO CRM"
+                    title={isLearner ? 'Learner pipeline' : 'Institution pipeline'}
+                    subtitle={isLearner
+                        ? `${audienceLeads.length} learner${audienceLeads.length === 1 ? '' : 's'} · activation means a challenge attempt, not a sign-up.`
+                        : `${audienceLeads.length} institution${audienceLeads.length === 1 ? '' : 's'} · discovery and pilots only; there is no confirmed offer yet.`}
                     actions={(
                         <>
                             <Button icon="upload" onClick={() => setImportOpen(true)}>Import</Button>
                             <Button icon="download" onClick={() => void exportCsv(Array.from(selected))}>{selected.size ? `Export ${selected.size}` : 'Export'}</Button>
-                            <Button variant="primary" icon="plus" onClick={() => { setEditing(null); setFormOpen(true); }}>New lead</Button>
+                            <Button variant="primary" icon="plus" onClick={() => { setEditing(null); setFormOpen(true); }}>{isLearner ? 'New learner' : 'New institution'}</Button>
                         </>
                     )}
                 />
 
+                <div className="ws-pipeline-tabs" role="tablist" aria-label="ALGO pipeline">
+                    <button className={isLearner ? 'active' : ''} onClick={() => changeAudience('learner')} role="tab" aria-selected={isLearner}>
+                        <Icon name="users" size={14} /> Learners <span>{learnerCount}</span>
+                    </button>
+                    <button className={!isLearner ? 'active' : ''} onClick={() => changeAudience('institution')} role="tab" aria-selected={!isLearner}>
+                        <Icon name="building" size={14} /> Institutions <span>{institutionCount}</span>
+                    </button>
+                </div>
+
                 <div className="ws-toolbar" style={{ marginBottom: 14 }}>
-                    <SearchInput value={search} onChange={value => { setSearch(value); setPage(1); }} placeholder="Search leads, companies, email…" className="ws-search-wide" />
+                    <SearchInput value={search} onChange={value => { setSearch(value); setPage(1); }} placeholder={isLearner ? 'Search learners, source, notes…' : 'Search institutions, contacts, notes…'} className="ws-search-wide" />
                     <Select value={stageFilter} onChange={e => { setStageFilter(e.target.value); setPage(1); }} aria-label="Filter by stage">
                         <option value="all">All stages</option>
-                        {stages.map(stage => <option key={stage.id} value={stage.id}>{stage.name}</option>)}
+                        {audienceStages.map(stage => <option key={stage.id} value={stage.id}>{stage.name}</option>)}
                     </Select>
                     <Select value={ownerFilter} onChange={e => { setOwnerFilter(e.target.value); setPage(1); }} aria-label="Filter by owner">
                         <option value="all">All owners</option>
@@ -199,10 +243,22 @@ export const CRMView: React.FC<CRMViewProps> = ({ workspaceId, userId, selectedL
                         <option value="all">All priorities</option>
                         {PRIORITIES.map(priority => <option key={priority} value={priority}>{PRIORITY_LABEL[priority]}</option>)}
                     </Select>
+                    <Select value={sourceFilter} onChange={e => { setSourceFilter(e.target.value); setPage(1); }} aria-label="Filter by source">
+                        <option value="all">All sources</option>
+                        <option value="unknown">No source</option>
+                        {LEAD_SOURCES.map(source => <option key={source.id} value={source.id}>{source.label}</option>)}
+                    </Select>
+                    {isLearner && (
+                        <Select value={qualityFilter} onChange={e => { setQualityFilter(e.target.value as 'all' | LeadQuality | 'unassessed'); setPage(1); }} aria-label="Filter by lead quality">
+                            <option value="all">All quality</option>
+                            {LEAD_QUALITIES.map(quality => <option key={quality.id} value={quality.id}>{quality.label}</option>)}
+                            <option value="unassessed">Not assessed</option>
+                        </Select>
+                    )}
                     <button
                         className={`ws-btn ws-btn-sm ${showArchived ? 'ws-btn-subtle' : 'ws-btn-ghost'}`}
                         onClick={() => { setShowArchived(value => !value); setPage(1); setSelected(new Set()); }}
-                        title="Include archived leads"
+                        title="Include archived records"
                     >
                         <Icon name="archive" size={14} /> {showArchived ? 'Archived shown' : 'Archived'}
                     </button>
@@ -220,7 +276,7 @@ export const CRMView: React.FC<CRMViewProps> = ({ workspaceId, userId, selectedL
                         <Button size="sm" icon="refresh" onClick={() => void runBulk('restore')}>Restore</Button>
                         <Select value={bulkStage} onChange={e => setBulkStage(e.target.value)} aria-label="Move to stage">
                             <option value="">Move to stage…</option>
-                            {stages.map(stage => <option key={stage.id} value={stage.id}>{stage.name}</option>)}
+                            {audienceStages.map(stage => <option key={stage.id} value={stage.id}>{stage.name}</option>)}
                         </Select>
                         <Button size="sm" icon="arrow-right" disabled={!bulkStage} onClick={() => void runBulk('move')}>Move</Button>
                         {user?.role === 'admin' && <Button size="sm" variant="danger" icon="trash" onClick={() => setConfirmDelete(true)}>Delete</Button>}
@@ -233,17 +289,20 @@ export const CRMView: React.FC<CRMViewProps> = ({ workspaceId, userId, selectedL
                 {!loading && !error && filtered.length === 0 && (
                     <EmptyState
                         icon="crm"
-                        title={leads.length === 0 ? 'Your pipeline is empty' : 'No leads match these filters'}
-                        description={leads.length === 0 ? 'Create a lead or import a CSV to start tracking opportunities.' : 'Try clearing the search or filters.'}
-                        action={<Button variant="primary" icon="plus" onClick={() => { setEditing(null); setFormOpen(true); }}>New lead</Button>}
+                        title={audienceLeads.length === 0 ? (isLearner ? 'No learners yet' : 'No institutions yet') : 'No records match these filters'}
+                        description={audienceLeads.length === 0
+                            ? (isLearner ? 'Add a learner from a source or import a CSV to start tracking activation and feedback.' : 'Add a college or training institute to start discovery. No offer is promised yet.')
+                            : 'Try clearing the search or filters.'}
+                        action={<Button variant="primary" icon="plus" onClick={() => { setEditing(null); setFormOpen(true); }}>{isLearner ? 'New learner' : 'New institution'}</Button>}
                     />
                 )}
 
                 {!loading && !error && filtered.length > 0 && view === 'kanban' && (
                     <div className="ws-pipeline">
-                        {stages.map(stage => {
+                        {audienceStages.map(stage => {
                             const stageLeads = filtered.filter(lead => lead.stageId === stage.id);
                             const value = stageLeads.reduce((sum, lead) => sum + lead.value, 0);
+                            const activated = stageLeads.filter(lead => (lead.challengeAttempts || 0) > 0).length;
                             return (
                                 <div
                                     key={stage.id}
@@ -257,7 +316,9 @@ export const CRMView: React.FC<CRMViewProps> = ({ workspaceId, userId, selectedL
                                         <span className="ws-pipeline-name">{stage.name}</span>
                                         <span className="ws-pipeline-count">{stageLeads.length}</span>
                                     </div>
-                                    <div className="ws-pipeline-value">{formatMoney(value)} total value</div>
+                                    <div className="ws-pipeline-value">
+                                        {isLearner ? `${activated} activated · ${stageLeads.length} total` : `${formatMoney(value)} total value`}
+                                    </div>
                                     <div className="ws-pipeline-body">
                                         {stageLeads.map(lead => (
                                             <article
@@ -275,22 +336,30 @@ export const CRMView: React.FC<CRMViewProps> = ({ workspaceId, userId, selectedL
                                                     </div>
                                                     <PriorityDot priority={lead.priority} />
                                                 </div>
-                                                <div className="ws-lead-meta">
-                                                    <span className="ws-lead-value">{formatMoney(lead.value)}</span>
-                                                    {lead.nextFollowUpAt ? (
-                                                        <span className="ws-lead-next"><Icon name="clock" size={10} /> {formatDate(lead.nextFollowUpAt)}</span>
-                                                    ) : (
-                                                        <span className="ws-lead-next">{lead.ownerName}</span>
-                                                    )}
-                                                </div>
-                                                {lead.tags.length > 0 && (
+                                                {isLearner ? (
+                                                    <div className="ws-lead-meta">
+                                                        <span className="ws-lead-next">{sourceLabel(lead.source)}</span>
+                                                        <span className="ws-lead-value">{lead.challengeAttempts || 0} attempt{(lead.challengeAttempts || 0) === 1 ? '' : 's'}</span>
+                                                    </div>
+                                                ) : (
+                                                    <div className="ws-lead-meta">
+                                                        <span className="ws-lead-value">{formatMoney(lead.value)}</span>
+                                                        {lead.nextFollowUpAt ? (
+                                                            <span className="ws-lead-next"><Icon name="clock" size={10} /> {formatDate(lead.nextFollowUpAt)}</span>
+                                                        ) : (
+                                                            <span className="ws-lead-next">{lead.ownerName}</span>
+                                                        )}
+                                                    </div>
+                                                )}
+                                                {(lead.quality || (lead.tags && lead.tags.length > 0)) && (
                                                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 7 }}>
+                                                        {isLearner && lead.quality && <Badge tone={LEAD_QUALITY_TONE[lead.quality]}>{LEAD_QUALITY_LABEL[lead.quality]}</Badge>}
                                                         {lead.tags.slice(0, 3).map(tag => <span key={tag.id} className="ws-chip" style={{ fontSize: 9, padding: '1px 6px' }}>{tag.name}</span>)}
                                                     </div>
                                                 )}
                                             </article>
                                         ))}
-                                        {stageLeads.length === 0 && <div className="ws-pipeline-empty">Drop leads here</div>}
+                                        {stageLeads.length === 0 && <div className="ws-pipeline-empty">Drop records here</div>}
                                     </div>
                                 </div>
                             );
@@ -304,11 +373,21 @@ export const CRMView: React.FC<CRMViewProps> = ({ workspaceId, userId, selectedL
                             <thead>
                                 <tr>
                                     <th className="ws-checkbox-cell"><input type="checkbox" checked={allPageSelected} onChange={toggleAllPage} aria-label="Select all on page" /></th>
-                                    <th className="sortable" onClick={() => toggleSort('name')}>Lead {sortKey === 'name' && (sortDir === 'asc' ? '↑' : '↓')}</th>
-                                    <th>Company</th>
+                                    <th className="sortable" onClick={() => toggleSort('name')}>{isLearner ? 'Learner' : 'Institution'} {sortKey === 'name' && (sortDir === 'asc' ? '↑' : '↓')}</th>
+                                    {isLearner ? (
+                                        <>
+                                            <th>Source</th>
+                                            <th>Quality</th>
+                                            <th>Activation</th>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <th>Organisation</th>
+                                            <th className="sortable" onClick={() => toggleSort('value')}>Value {sortKey === 'value' && (sortDir === 'asc' ? '↑' : '↓')}</th>
+                                            <th>Priority</th>
+                                        </>
+                                    )}
                                     <th>Stage</th>
-                                    <th className="sortable" onClick={() => toggleSort('value')}>Value {sortKey === 'value' && (sortDir === 'asc' ? '↑' : '↓')}</th>
-                                    <th>Priority</th>
                                     <th>Owner</th>
                                     <th>Next follow-up</th>
                                     <th className="sortable" onClick={() => toggleSort('updated')}>Updated {sortKey === 'updated' && (sortDir === 'asc' ? '↑' : '↓')}</th>
@@ -326,15 +405,28 @@ export const CRMView: React.FC<CRMViewProps> = ({ workspaceId, userId, selectedL
                                                 <Avatar name={lead.name} size={28} />
                                                 <div>
                                                     <div className="cell-title">{lead.name}</div>
-                                                    <div className="cell-sub">{lead.email || lead.phone || 'No contact details'}</div>
+                                                    <div className="cell-sub">{lead.email || lead.phone || lead.company || 'No contact details'}</div>
                                                 </div>
                                                 {lead.archived === 1 && <Badge tone="neutral">Archived</Badge>}
                                             </div>
                                         </td>
-                                        <td>{lead.company || '—'}</td>
+                                        {isLearner ? (
+                                            <>
+                                                <td>{sourceLabel(lead.source)}</td>
+                                                <td>{lead.quality ? <Badge tone={LEAD_QUALITY_TONE[lead.quality]}>{LEAD_QUALITY_LABEL[lead.quality]}</Badge> : <span className="ws-muted">Not assessed</span>}</td>
+                                                <td>
+                                                    <div className="cell-title">{lead.challengeAttempts || 0} attempt{(lead.challengeAttempts || 0) === 1 ? '' : 's'}</div>
+                                                    <div className="cell-sub">{lead.feedbackStatus === 'submitted' ? 'Feedback in' : lead.feedbackStatus === 'requested' ? 'Feedback requested' : 'No feedback yet'}</div>
+                                                </td>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <td>{lead.company || '—'}</td>
+                                                <td className="cell-mono">{formatMoney(lead.value)}</td>
+                                                <td><span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span className="ws-priority-dot" style={{ background: PRIORITY_COLOR[lead.priority] }} />{PRIORITY_LABEL[lead.priority]}</span></td>
+                                            </>
+                                        )}
                                         <td>{lead.stage ? <Badge tone="blue" dot color={lead.stage.color}>{lead.stage.name}</Badge> : '—'}</td>
-                                        <td className="cell-mono">{formatMoney(lead.value)}</td>
-                                        <td><span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span className="ws-priority-dot" style={{ background: PRIORITY_COLOR[lead.priority] }} />{PRIORITY_LABEL[lead.priority]}</span></td>
                                         <td>{lead.ownerName}</td>
                                         <td>{lead.nextFollowUpAt ? formatDate(lead.nextFollowUpAt) : '—'}</td>
                                         <td>{formatDate(lead.updatedAt)}</td>
@@ -365,6 +457,7 @@ export const CRMView: React.FC<CRMViewProps> = ({ workspaceId, userId, selectedL
                 lead={editing}
                 leadTags={editing ? leads.find(lead => lead.id === editing.id)?.tags.map(tag => tag.name) : []}
                 tagSuggestions={data?.tagSuggestions || []}
+                defaultAudience={audience}
                 onClose={() => { setFormOpen(false); setEditing(null); }}
                 onSaved={() => void reload()}
             />

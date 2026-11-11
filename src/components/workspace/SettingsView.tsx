@@ -12,6 +12,8 @@ import {
     type WorkspaceUser,
 } from '../../services/workspace';
 import { createStage, deleteStage, reorderStage, updateStage } from '../../services/pipeline';
+import { applyAlgoTemplate } from '../../services/algoSetup';
+import { stagesForAudience } from '../../services/algo';
 import { listLeadStages } from '../../services/leads';
 import {
     createWorkspaceVersion,
@@ -31,7 +33,7 @@ import {
     uploadWorkspaceBackup,
     type CloudBackupConfig,
 } from '../../services/cloud';
-import { DEFAULT_WORKSPACE_ID, type UserRole } from '../../db';
+import { DEFAULT_WORKSPACE_ID, type LeadAudience, type UserRole } from '../../db';
 import { formatDate, formatDateTime } from '../../services/validation';
 import { toErrorMessage } from '../../services/errors';
 import { useAuth } from '../../context/AuthContext';
@@ -598,12 +600,27 @@ const PipelineSection: React.FC<{
     onChanged: () => void;
 }> = ({ workspaceId, stages, isAdmin, loading, onChanged }) => {
     const toast = useToast();
+    const [audience, setAudience] = useState<LeadAudience>('learner');
     const [newName, setNewName] = useState('');
     const [newColor, setNewColor] = useState('#0071e3');
     const [busy, setBusy] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editName, setEditName] = useState('');
     const [editColor, setEditColor] = useState('#0071e3');
+    const audienceStages = stagesForAudience(stages, audience);
+
+    const applyTemplate = async () => {
+        setBusy(true);
+        try {
+            const result = await applyAlgoTemplate(workspaceId);
+            toast.success(result.createdProject ? 'ALGO pipelines and first-cohort project created.' : 'ALGO pipelines applied.');
+            onChanged();
+        } catch (e) {
+            toast.error(toErrorMessage(e));
+        } finally {
+            setBusy(false);
+        }
+    };
 
     const startEdit = (stage: Awaited<ReturnType<typeof listLeadStages>>[number]) => {
         setEditingId(stage.id);
@@ -630,7 +647,7 @@ const PipelineSection: React.FC<{
         event.preventDefault();
         setBusy(true);
         try {
-            await createStage(workspaceId, { name: newName, color: newColor });
+            await createStage(workspaceId, { name: newName, color: newColor, audience });
             setNewName('');
             toast.success('Stage added.');
             onChanged();
@@ -661,9 +678,26 @@ const PipelineSection: React.FC<{
     };
 
     return (
-        <SectionCard title="CRM pipeline stages" description="Stages are used by every lead in this workspace. The first stage is treated as New; stages flagged as won or lost drive conversion reporting.">
+        <SectionCard
+            title="ALGO pipelines"
+            description="Learners and institutions have separate stages. Quality is recorded on the record, not inferred from the stage."
+            action={isAdmin ? (
+                <Button size="sm" icon="sparkles" loading={busy} onClick={() => void applyTemplate()}>
+                    Apply ALGO template
+                </Button>
+            ) : undefined}
+        >
+            <div className="ws-pipeline-tabs" role="tablist" aria-label="Pipeline to edit">
+                <button className={audience === 'learner' ? 'active' : ''} onClick={() => setAudience('learner')} role="tab" aria-selected={audience === 'learner'}>
+                    <Icon name="users" size={14} /> Learners <span>{stagesForAudience(stages, 'learner').length}</span>
+                </button>
+                <button className={audience === 'institution' ? 'active' : ''} onClick={() => setAudience('institution')} role="tab" aria-selected={audience === 'institution'}>
+                    <Icon name="building" size={14} /> Institutions <span>{stagesForAudience(stages, 'institution').length}</span>
+                </button>
+            </div>
+
             {loading && <p className="ws-muted">Loading stages…</p>}
-            {!loading && stages.map((stage, index) => (
+            {!loading && audienceStages.map((stage, index) => (
                 <div key={stage.id} className="ws-stage-row">
                     <span className="ws-stage-color" style={{ background: stage.color }} />
                     {editingId === stage.id ? (
@@ -677,15 +711,15 @@ const PipelineSection: React.FC<{
                         <>
                             <span className="ws-stage-name">
                                 {stage.name}
-                                {stage.isWon === 1 && <Badge tone="green">Won</Badge>}
-                                {stage.isLost === 1 && <Badge tone="neutral">Lost</Badge>}
+                                {stage.isWon === 1 && <Badge tone="green">{audience === 'learner' ? 'Feedback / success' : 'Won'}</Badge>}
+                                {stage.isLost === 1 && <Badge tone="neutral">{audience === 'learner' ? 'Not fit' : 'Lost'}</Badge>}
                             </span>
                             {isAdmin && (
                                 <div className="ws-user-actions">
                                     <IconButton icon="chevron-up" label="Move earlier" disabled={index === 0} onClick={() => void move(stage.id, -1)} />
-                                    <IconButton icon="chevron-down" label="Move later" disabled={index === stages.length - 1} onClick={() => void move(stage.id, 1)} />
+                                    <IconButton icon="chevron-down" label="Move later" disabled={index === audienceStages.length - 1} onClick={() => void move(stage.id, 1)} />
                                     <IconButton icon="edit" label="Edit stage" onClick={() => startEdit(stage)} />
-                                    <IconButton icon="trash" label="Delete stage" danger disabled={stages.length <= 1} onClick={() => void remove(stage.id)} />
+                                    <IconButton icon="trash" label="Delete stage" danger disabled={audienceStages.length <= 1} onClick={() => void remove(stage.id)} />
                                 </div>
                             )}
                         </>
@@ -696,12 +730,17 @@ const PipelineSection: React.FC<{
                 <form onSubmit={addStage} style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginTop: 14 }}>
                     <div style={{ flex: 1 }}>
                         <Field label="New stage" htmlFor="new-stage-name">
-                            <TextInput id="new-stage-name" value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Discovery" />
+                            <TextInput id="new-stage-name" value={newName} onChange={e => setNewName(e.target.value)} placeholder={audience === 'learner' ? 'e.g. Re-engaged' : 'e.g. Pilot scoping'} />
                         </Field>
                     </div>
                     <TextInput type="color" aria-label="Stage colour" value={newColor} onChange={e => setNewColor(e.target.value)} style={{ width: 44, padding: 2 }} />
                     <Button type="submit" icon="plus" loading={busy} disabled={!newName.trim()}>Add stage</Button>
                 </form>
+            )}
+            {isAdmin && (
+                <p className="ws-muted" style={{ marginTop: 14, fontSize: 12 }}>
+                    Applying the ALGO template also creates the shared “ALGO — First Cohort” project with milestones, tasks, a working note and a review follow-up. Existing leads are preserved.
+                </p>
             )}
         </SectionCard>
     );

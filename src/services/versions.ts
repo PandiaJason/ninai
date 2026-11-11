@@ -1,4 +1,5 @@
 import { db, type WorkspaceVersion, type WorkspaceVersionKind } from '../db';
+import { ensureAlgoPipelines } from './algo';
 import { requireUser } from './auth';
 import { AppError } from './errors';
 import { assertWorkspaceAccess } from './permissions';
@@ -34,13 +35,14 @@ interface SnapshotPayload {
     notifications: unknown[];
     activities: unknown[];
     followUps: unknown[];
+    learnerFeedback?: unknown[];
 }
 
 async function buildSnapshot(workspaceId: string): Promise<SnapData> {
     const [
         workspace, users, workspaceMembers, leadStages, notes, folders, leads, leadActivities,
         projects, projectMembers, projectLeads, projectMilestones, tasks, subtasks, taskComments,
-        calendarEvents, tags, recordTags, noteLinks, notifications, activities, followUps,
+        calendarEvents, tags, recordTags, noteLinks, notifications, activities, followUps, learnerFeedback,
     ] = await Promise.all([
         db.workspaces.get(workspaceId),
         db.users.toArray(),
@@ -64,6 +66,7 @@ async function buildSnapshot(workspaceId: string): Promise<SnapData> {
         db.notifications.where('workspaceId').equals(workspaceId).toArray(),
         db.activities.where('workspaceId').equals(workspaceId).toArray(),
         db.followUps.where('workspaceId').equals(workspaceId).toArray(),
+        db.learnerFeedback.where('workspaceId').equals(workspaceId).toArray(),
     ]);
 
     const projectIds = new Set(projects.map(project => project.id));
@@ -105,6 +108,7 @@ async function buildSnapshot(workspaceId: string): Promise<SnapData> {
         notifications,
         activities,
         followUps,
+        learnerFeedback,
     };
 
     return {
@@ -112,7 +116,7 @@ async function buildSnapshot(workspaceId: string): Promise<SnapData> {
         entityCount: notes.length + folders.length + leads.length + leadActivities.length + projects.length
             + projectMilestones.length + tasks.length + subtasks.length + taskComments.length
             + calendarEvents.length + tags.length + recordTags.length + noteLinks.length
-            + notifications.length + activities.length + followUps.length,
+            + notifications.length + activities.length + followUps.length + learnerFeedback.length,
     };
 }
 
@@ -226,6 +230,7 @@ export async function restoreWorkspaceVersion(versionId: string): Promise<void> 
         db.projects, db.projectMembers, db.projectLeads, db.projectMilestones,
         db.tasks, db.subtasks, db.taskComments, db.calendarEvents, db.tags,
         db.recordTags, db.noteLinks, db.notifications, db.activities, db.followUps,
+        db.learnerFeedback,
     ], async () => {
         const oldProjectIds = (await db.projects.where('workspaceId').equals(version.workspaceId).toArray()).map(project => project.id);
         const oldTaskIds = (await db.tasks.where('workspaceId').equals(version.workspaceId).toArray()).map(task => task.id);
@@ -253,6 +258,7 @@ export async function restoreWorkspaceVersion(versionId: string): Promise<void> 
         await db.notifications.where('workspaceId').equals(version.workspaceId).delete();
         await db.activities.where('workspaceId').equals(version.workspaceId).delete();
         await db.followUps.where('workspaceId').equals(version.workspaceId).delete();
+        await db.learnerFeedback.where('workspaceId').equals(version.workspaceId).delete();
 
         if (notes.length) await db.notes.bulkPut(notes);
         if (payload.folders?.length) await db.folders.bulkPut(payload.folders as any);
@@ -280,7 +286,12 @@ export async function restoreWorkspaceVersion(versionId: string): Promise<void> 
         if (payload.noteLinks?.length) await db.noteLinks.bulkPut(payload.noteLinks as any);
         if (payload.notifications?.length) await db.notifications.bulkPut(payload.notifications as any);
         if (payload.followUps?.length) await db.followUps.bulkPut(payload.followUps as any);
+        if (payload.learnerFeedback?.length) await db.learnerFeedback.bulkPut(payload.learnerFeedback as any);
     });
+
+    // Snapshots made before the ALGO migration may not contain institution
+    // stages or audience fields. Normalise them immediately after restore.
+    await ensureAlgoPipelines(version.workspaceId);
 
     await db.activities.add({
         id: crypto.randomUUID(),

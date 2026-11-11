@@ -13,6 +13,10 @@ NINAI is local-first. The workspace database lives in IndexedDB through Dexie, a
 
 The primary database is never replaced by a cloud connection. Cloud and Git are explicit backups. A restore always creates a safety snapshot first.
 
+## ALGO CRM
+
+The CRM is split into a learner activation pipeline and a separate institution pipeline, with structured learner feedback and a source-quality Insights view. See [ALGO-CRM.md](./ALGO-CRM.md) for stage definitions, activation rules, feedback fields, analytics and the current collaboration limits.
+
 ## Projects
 
 Projects are restored on top of the dormant project tables. A project has:

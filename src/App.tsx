@@ -10,6 +10,7 @@ import { LoginScreen } from './components/auth/LoginScreen';
 import { useAuth } from './context/AuthContext';
 import { DashboardView } from './components/workspace/DashboardView';
 import { CRMView } from './components/workspace/CRMView';
+import { AnalyticsView } from './components/workspace/AnalyticsView';
 import { ProjectsView } from './components/workspace/ProjectsView';
 import { FollowUpsView } from './components/workspace/FollowUpsView';
 import { TasksView } from './components/workspace/TasksView';
@@ -18,7 +19,7 @@ import { SettingsView } from './components/workspace/SettingsView';
 import { GlobalSearch } from './components/workspace/GlobalSearch';
 import type { ModuleId, WorkspaceNav } from './types/workspace';
 
-const MODULE_IDS: ModuleId[] = ['dashboard', 'crm', 'projects', 'followups', 'tasks', 'notes', 'calendar', 'settings', 'tools'];
+const MODULE_IDS: ModuleId[] = ['dashboard', 'crm', 'analytics', 'projects', 'followups', 'tasks', 'notes', 'calendar', 'settings', 'tools'];
 
 function readModule(): ModuleId {
     const saved = localStorage.getItem('ninai_active_module') as ModuleId | null;
@@ -241,9 +242,10 @@ function App() {
                         nav={nav}
                     />
                 );
+            case 'analytics':
+                return <AnalyticsView workspaceId={workspace.id} nav={nav} />;
             case 'projects':
-                return (
-                    <ProjectsView
+                return (                    <ProjectsView
                         workspaceId={workspace.id}
                         userId={user.id}
                         selectedProjectId={selectedProjectId}

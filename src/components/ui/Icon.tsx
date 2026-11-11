@@ -10,7 +10,7 @@ export type IconName =
     | 'external' | 'flag' | 'refresh' | 'folder' | 'inbox' | 'heart' | 'message'
     | 'file' | 'briefcase' | 'circle-check' | 'plus-circle' | 'calendar-plus' | 'send'
     | 'copy' | 'sparkles' | 'more-vertical' | 'grid' | 'at-sign' | 'map-pin'
-    | 'projects' | 'followups' | 'cloud' | 'history' | 'git-branch';
+    | 'projects' | 'followups' | 'cloud' | 'history' | 'git-branch' | 'chart';
 
 interface IconProps {
     name: IconName;
@@ -90,6 +90,7 @@ export const Icon: React.FC<IconProps> = ({ name, size = 18, strokeWidth = 1.8, 
             case 'cloud': return <><path d="M18 18a4 4 0 0 0 .5-7.97A6 6 0 0 0 6.7 9.3 3.5 3.5 0 0 0 7 18z" /><path d="M12 12v6M9.5 15.5 12 18l2.5-2.5" /></>;
             case 'history': return <><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5M12 7v5l3 2" /></>;
             case 'git-branch': return <><circle cx="6" cy="5" r="2" /><circle cx="6" cy="19" r="2" /><circle cx="18" cy="7" r="2" /><path d="M6 7v10M8 5h4a4 4 0 0 1 4 4v8" /></>;
+            case 'chart': return <><path d="M3 3v18h18" /><rect x="7" y="12" width="3" height="6" rx="1" /><rect x="12" y="8" width="3" height="10" rx="1" /><rect x="17" y="5" width="3" height="13" rx="1" /></>;
             default: return null;
         }
     })();

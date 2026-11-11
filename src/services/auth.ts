@@ -2,11 +2,11 @@ import {
     db,
     DEFAULT_ADMIN_EMAIL,
     DEFAULT_ADMIN_PASSWORD,
-    DEFAULT_STAGES,
     DEFAULT_WORKSPACE_ID,
     type User,
     type UserRole,
 } from '../db';
+import { ensureAlgoPipelines } from './algo';
 import { AppError } from './errors';
 import { colorFor, email as validateEmail, required } from './validation';
 
@@ -78,13 +78,7 @@ async function seedDefaultAdmin(): Promise<void> {
 }
 
 async function seedStages(workspaceId: string): Promise<void> {
-    const count = await db.leadStages.where('workspaceId').equals(workspaceId).count();
-    if (count > 0) return;
-    await db.leadStages.bulkAdd(DEFAULT_STAGES.map(stage => ({
-        ...stage,
-        id: workspaceId === DEFAULT_WORKSPACE_ID ? stage.id : `${stage.id}_${workspaceId}`,
-        workspaceId,
-    })));
+    await ensureAlgoPipelines(workspaceId);
 }
 
 async function doSeed(): Promise<void> {

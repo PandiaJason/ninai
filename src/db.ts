@@ -79,6 +79,13 @@ export interface WorkspaceMember {
 
 export type Priority = 'low' | 'medium' | 'high' | 'urgent';
 
+export type LeadAudience = 'learner' | 'institution';
+export type LeadQuality = 'genuine' | 'exploring' | 'generic' | 'not_fit';
+export type LearnerPersona = 'final_year' | 'recent_grad' | 'early_career' | 'career_switcher' | 'institution' | 'other';
+export type FeedbackStatus = 'not_requested' | 'requested' | 'submitted';
+export type StuckCategory = 'setup' | 'concepts' | 'difficulty' | 'time' | 'value' | 'motivation' | 'bug' | 'other';
+export type FeedbackTheme = 'clarity' | 'difficulty' | 'time' | 'relevance' | 'bugs' | 'content_gap' | 'motivation';
+
 export interface LeadStage {
     id: string;
     workspaceId: string;
@@ -87,6 +94,7 @@ export interface LeadStage {
     order: number;
     isWon: number;
     isLost: number;
+    audience?: LeadAudience;     // Learner and institution pipelines are separate.
 }
 
 export interface Lead {
@@ -99,6 +107,7 @@ export interface Lead {
     website?: string;
     jobTitle?: string;
     source?: string;
+    sourceDetail?: string;
     industry?: string;
     location?: string;
     ownerId: string;
@@ -113,9 +122,41 @@ export interface Lead {
     archived: number;
     createdBy: string;
     convertedAt?: number;
+
+    // ALGO learner / institution profile
+    audience?: LeadAudience;
+    persona?: LearnerPersona;
+    quality?: LeadQuality;
+    firstChallengeAt?: number;
+    challengeAttempts?: number;
+    tracksExplored?: string[];
+    lastActiveAt?: number;
+    feedbackStatus?: FeedbackStatus;
+    dropOffReason?: string;
+    institutionType?: string;
+    studentCount?: number;
 }
 
-export type LeadActivityType = 'call' | 'email' | 'meeting' | 'message' | 'follow_up' | 'note' | 'update' | 'stage_change';
+export interface LearnerFeedback {
+    id: string;
+    workspaceId: string;
+    leadId: string;
+    whyStarted: string;
+    tracksExplored: string[];
+    stuckCategory: StuckCategory;
+    whereStuck: string;
+    continuedReason?: string;
+    stoppedReason?: string;
+    fdeHelpRating: number;
+    recommendations?: string;
+    themes: FeedbackTheme[];
+    consentToContact: number;
+    submittedAt: number;
+    createdBy: string;
+    updatedAt: number;
+}
+
+export type LeadActivityType = 'call' | 'email' | 'meeting' | 'message' | 'follow_up' | 'note' | 'update' | 'stage_change' | 'challenge' | 'feedback' | 'activation';
 
 export interface LeadActivity {
     id: string;
@@ -357,14 +398,23 @@ export const DEFAULT_ADMIN_EMAIL = 'admin@ninai.app';
 export const DEFAULT_ADMIN_PASSWORD = 'ninai-admin';
 
 export const DEFAULT_STAGES: Omit<LeadStage, 'workspaceId'>[] = [
-    { id: 'stage_new', name: 'New', color: '#0071e3', order: 0, isWon: 0, isLost: 0 },
-    { id: 'stage_contacted', name: 'Contacted', color: '#5e5ce6', order: 1, isWon: 0, isLost: 0 },
-    { id: 'stage_interested', name: 'Interested', color: '#30b0c7', order: 2, isWon: 0, isLost: 0 },
-    { id: 'stage_qualified', name: 'Qualified', color: '#34c759', order: 3, isWon: 0, isLost: 0 },
-    { id: 'stage_proposal', name: 'Proposal', color: '#ff9f0a', order: 4, isWon: 0, isLost: 0 },
-    { id: 'stage_negotiation', name: 'Negotiation', color: '#ff375f', order: 5, isWon: 0, isLost: 0 },
-    { id: 'stage_converted', name: 'Converted', color: '#30d158', order: 6, isWon: 1, isLost: 0 },
-    { id: 'stage_lost', name: 'Lost', color: '#8e8e93', order: 7, isWon: 0, isLost: 1 },
+    { id: 'stage_requested', name: 'Requested', color: '#0071e3', order: 0, isWon: 0, isLost: 0, audience: 'learner' },
+    { id: 'stage_invited', name: 'Invited', color: '#5e5ce6', order: 1, isWon: 0, isLost: 0, audience: 'learner' },
+    { id: 'stage_activated', name: 'Activated', color: '#30b0c7', order: 2, isWon: 0, isLost: 0, audience: 'learner' },
+    { id: 'stage_engaged', name: 'Engaged', color: '#34c759', order: 3, isWon: 0, isLost: 0, audience: 'learner' },
+    { id: 'stage_feedback', name: 'Feedback', color: '#30d158', order: 4, isWon: 1, isLost: 0, audience: 'learner' },
+    { id: 'stage_nurture', name: 'Nurture', color: '#ff9f0a', order: 5, isWon: 0, isLost: 0, audience: 'learner' },
+    { id: 'stage_not_fit', name: 'Not fit', color: '#8e8e93', order: 6, isWon: 0, isLost: 1, audience: 'learner' },
+];
+
+export const DEFAULT_INSTITUTION_STAGES: Omit<LeadStage, 'workspaceId'>[] = [
+    { id: 'inst_stage_prospect', name: 'Prospect', color: '#0071e3', order: 0, isWon: 0, isLost: 0, audience: 'institution' },
+    { id: 'inst_stage_contacted', name: 'Contacted', color: '#5e5ce6', order: 1, isWon: 0, isLost: 0, audience: 'institution' },
+    { id: 'inst_stage_discovery', name: 'Discovery', color: '#30b0c7', order: 2, isWon: 0, isLost: 0, audience: 'institution' },
+    { id: 'inst_stage_pilot_agreed', name: 'Pilot agreed', color: '#34c759', order: 3, isWon: 0, isLost: 0, audience: 'institution' },
+    { id: 'inst_stage_pilot_running', name: 'Pilot running', color: '#ff9f0a', order: 4, isWon: 0, isLost: 0, audience: 'institution' },
+    { id: 'inst_stage_partner', name: 'Partner', color: '#30d158', order: 5, isWon: 1, isLost: 0, audience: 'institution' },
+    { id: 'inst_stage_not_now', name: 'Not now', color: '#8e8e93', order: 6, isWon: 0, isLost: 1, audience: 'institution' },
 ];
 
 export class NinaiDB extends Dexie {
@@ -390,11 +440,102 @@ export class NinaiDB extends Dexie {
     notifications!: Table<Notification>;
     activities!: Table<Activity>;
     followUps!: Table<FollowUp>;
+    learnerFeedback!: Table<LearnerFeedback>;
     workspaceVersions!: Table<WorkspaceVersion>;
     syncState!: Table<SyncState>;
 
     constructor() {
         super('NinaiDB');
+
+        // Version 10: ALGO learner / institution pipelines and structured learner feedback.
+        this.version(10).stores({
+            notes: 'id, folderId, title, updatedAt, loved, hasReminders, workspaceId, archived, [workspaceId+folderId], [workspaceId+updatedAt]',
+            folders: 'id, name, parentId, order, workspaceId',
+            users: 'id, &email, role, workspaceId, active',
+            workspaces: 'id, name, ownerId',
+            workspaceMembers: 'id, workspaceId, userId, [workspaceId+userId]',
+            leadStages: 'id, workspaceId, audience, order, [workspaceId+order], [workspaceId+audience]',
+            leads: 'id, workspaceId, audience, ownerId, stageId, priority, archived, createdAt, updatedAt, nextFollowUpAt, [workspaceId+archived], [workspaceId+audience], [workspaceId+stageId], [workspaceId+ownerId]',
+            leadActivities: 'id, workspaceId, leadId, userId, type, occurredAt, [leadId+occurredAt]',
+            projects: 'id, workspaceId, ownerId, status, priority, identifier, archived, createdAt, updatedAt, [workspaceId+status], [workspaceId+archived]',
+            projectMembers: 'id, projectId, userId, [projectId+userId]',
+            projectLeads: 'id, projectId, leadId, [projectId+leadId], [leadId+projectId]',
+            projectMilestones: 'id, workspaceId, projectId, dueDate, completed, [projectId+completed]',
+            tasks: 'id, workspaceId, projectId, leadId, assigneeId, status, priority, dueDate, createdAt, updatedAt, [projectId+status], [assigneeId+status], [workspaceId+status], [workspaceId+assigneeId], [workspaceId+dueDate]',
+            subtasks: 'id, taskId, order',
+            taskComments: 'id, taskId, userId, createdAt, [taskId+createdAt]',
+            calendarEvents: 'id, workspaceId, startAt, endAt, type, leadId, projectId, [workspaceId+startAt]',
+            tags: 'id, workspaceId, name, [workspaceId+name]',
+            recordTags: 'id, workspaceId, tagId, entityType, entityId, [entityType+entityId], [entityId+entityType]',
+            noteLinks: 'id, workspaceId, noteId, entityType, entityId, [entityType+entityId], [noteId+entityType]',
+            notifications: 'id, workspaceId, userId, read, createdAt, [userId+read]',
+            activities: 'id, workspaceId, entityType, entityId, userId, createdAt, [workspaceId+createdAt], [entityType+entityId]',
+            followUps: 'id, workspaceId, entityType, entityId, status, dueAt, assignedTo, createdBy, createdAt, updatedAt, [workspaceId+status], [workspaceId+dueAt], [workspaceId+assignedTo], [entityType+entityId]',
+            learnerFeedback: 'id, workspaceId, leadId, submittedAt, [workspaceId+submittedAt], [leadId+submittedAt]',
+            workspaceVersions: 'id, workspaceId, kind, createdBy, createdAt, [workspaceId+createdAt]',
+            syncState: 'id, workspaceId, provider, lastSyncedAt',
+        }).upgrade(async tx => {
+            const stageTable = tx.table('leadStages');
+            const leadTable = tx.table('leads');
+            const stages = await stageTable.toArray();
+            const byWorkspace = new Map<string, any[]>();
+            for (const stage of stages) {
+                const list = byWorkspace.get(stage.workspaceId) || [];
+                list.push(stage);
+                byWorkspace.set(stage.workspaceId, list);
+            }
+
+            for (const [workspaceId, workspaceStages] of byWorkspace) {
+                const learnerStages = workspaceStages.filter(stage => (stage.audience || 'learner') === 'learner');
+                const baseId = (id: string) => id.endsWith(`_${workspaceId}`) ? id.slice(0, -(workspaceId.length + 1)) : id;
+                const oldDefaults = new Set(['stage_new', 'stage_contacted', 'stage_interested', 'stage_qualified', 'stage_proposal', 'stage_negotiation', 'stage_converted', 'stage_lost']);
+                const isOldDefaultPipeline = learnerStages.length >= 7
+                    && learnerStages.every(stage => oldDefaults.has(baseId(stage.id)))
+                    && learnerStages.some(stage => baseId(stage.id) === 'stage_new');
+
+                if (isOldDefaultPipeline) {
+                    const mapping: Record<string, { name: string; color: string; order: number; isWon: number; isLost: number }> = {
+                        stage_new: { name: 'Requested', color: '#0071e3', order: 0, isWon: 0, isLost: 0 },
+                        stage_contacted: { name: 'Invited', color: '#5e5ce6', order: 1, isWon: 0, isLost: 0 },
+                        stage_interested: { name: 'Activated', color: '#30b0c7', order: 2, isWon: 0, isLost: 0 },
+                        stage_qualified: { name: 'Engaged', color: '#34c759', order: 3, isWon: 0, isLost: 0 },
+                        stage_proposal: { name: 'Feedback', color: '#30d158', order: 4, isWon: 1, isLost: 0 },
+                        stage_negotiation: { name: 'Nurture', color: '#ff9f0a', order: 5, isWon: 0, isLost: 0 },
+                        stage_lost: { name: 'Not fit', color: '#8e8e93', order: 6, isWon: 0, isLost: 1 },
+                    };
+                    const converted = learnerStages.find(stage => baseId(stage.id) === 'stage_converted');
+                    const feedbackStage = learnerStages.find(stage => baseId(stage.id) === 'stage_proposal');
+                    if (converted && feedbackStage && converted.id !== feedbackStage.id) {
+                        await leadTable.where('stageId').equals(converted.id).modify({ stageId: feedbackStage.id });
+                        await stageTable.delete(converted.id);
+                    }
+                    for (const stage of learnerStages) {
+                        if (stage.id === converted?.id) continue;
+                        const next = mapping[baseId(stage.id)];
+                        if (next) await stageTable.update(stage.id, { ...next, audience: 'learner' });
+                    }
+                } else {
+                    for (const stage of learnerStages) {
+                        await stageTable.update(stage.id, { audience: stage.audience || 'learner' });
+                    }
+                }
+
+                const hasInstitution = workspaceStages.some(stage => stage.audience === 'institution');
+                if (!hasInstitution) {
+                    await stageTable.bulkAdd(DEFAULT_INSTITUTION_STAGES.map(stage => ({
+                        ...stage,
+                        id: workspaceId === DEFAULT_WORKSPACE_ID ? stage.id : `${stage.id}_${workspaceId}`,
+                        workspaceId,
+                    })));
+                }
+            }
+
+            await leadTable.toCollection().modify(lead => {
+                if (!lead.audience) lead.audience = 'learner';
+                if (lead.challengeAttempts === undefined) lead.challengeAttempts = 0;
+                if (!lead.feedbackStatus) lead.feedbackStatus = 'not_requested';
+            });
+        });
 
         // Version 9: Projects return, unified follow-ups, version history and cloud backup state.
         this.version(9).stores({

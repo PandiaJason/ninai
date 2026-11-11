@@ -148,6 +148,9 @@ async function assertEntity(workspaceId: string, entityType: EntityType, entityI
     if (entityType === 'lead') {
         const lead = await db.leads.get(entityId);
         if (!lead || lead.workspaceId !== workspaceId) throw new AppError('NOT_FOUND', 'Lead not found.');
+    } else if (entityType === 'project') {
+        const project = await db.projects.get(entityId);
+        if (!project || project.workspaceId !== workspaceId) throw new AppError('NOT_FOUND', 'Project not found.');
     } else if (entityType === 'task') {
         const task = await db.tasks.get(entityId);
         if (!task || task.workspaceId !== workspaceId) throw new AppError('NOT_FOUND', 'Task not found.');

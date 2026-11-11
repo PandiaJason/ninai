@@ -1,6 +1,29 @@
 import React, { useState } from 'react';
 import type { LeadActivityType } from '../../db';
-import { archiveLead, addLeadActivity, deleteLead, getLead, listLeadActivities, listLeadStages, moveLeadStage, setLeadNextFollowUp } from '../../services/leads';
+import {
+    archiveLead,
+    addLeadActivity,
+    deleteLead,
+    getLead,
+    listLeadActivities,
+    listLeadStages,
+    logChallengeAttempt,
+    moveLeadStage,
+    requestLearnerFeedback,
+    setLeadNextFollowUp,
+} from '../../services/leads';
+import { getFeedbackForLead } from '../../services/feedback';
+import {
+    FEEDBACK_STATUS_LABEL,
+    FEEDBACK_THEME_LABEL,
+    LEAD_AUDIENCE_LABEL,
+    LEAD_QUALITY_LABEL,
+    LEAD_QUALITY_TONE,
+    LEARNER_PERSONA_LABEL,
+    STUCK_CATEGORY_LABEL,
+    sourceLabel,
+    stagesForAudience,
+} from '../../services/algo';
 import { getTagsForEntity, getTagSuggestions } from '../../services/tags';
 import { listProjectsForLead } from '../../services/projects';
 import { formatDate, formatDateTime, fromDatetimeLocal, toDatetimeLocal } from '../../services/validation';
@@ -14,6 +37,7 @@ import { useToast } from '../ui/Toast';
 import { MetaItem, PriorityBadge, Timeline, formatMoney } from './shared';
 import { useAsyncData } from './useAsyncData';
 import { LeadForm } from './LeadForm';
+import { FeedbackForm } from './FeedbackForm';
 import { EntityNotes } from './EntityNotes';
 import { EntityFollowUps } from './EntityFollowUps';
 
@@ -45,22 +69,27 @@ export const LeadDetail: React.FC<LeadDetailProps> = ({ workspaceId, leadId, nav
     const [activityBody, setActivityBody] = useState('');
     const [activityAt, setActivityAt] = useState(() => toDatetimeLocal(Date.now()));
     const [followUp, setFollowUp] = useState('');
+    const [feedbackOpen, setFeedbackOpen] = useState(false);
 
     const { data, loading, error, reload } = useAsyncData(async () => {
-        const [lead, activities, tags, stages, tagSuggestions, projects] = await Promise.all([
+        const [lead, activities, tags, stages, tagSuggestions, projects, feedback] = await Promise.all([
             getLead(leadId),
             listLeadActivities(leadId),
             getTagsForEntity('lead', leadId),
             listLeadStages(workspaceId),
             getTagSuggestions(workspaceId),
             listProjectsForLead(leadId).catch(() => []),
+            getFeedbackForLead(leadId).catch(() => undefined),
         ]);
-        return { lead, activities, tags, stages, tagSuggestions, projects };
+        return { lead, activities, tags, stages, tagSuggestions, projects, feedback };
     }, [workspaceId, leadId]);
 
     const lead = data?.lead;
-    const stage = data?.stages.find(item => item.id === lead?.stageId);
+    const stages = lead ? stagesForAudience(data?.stages || [], lead.audience || 'learner') : [];
+    const stage = stages.find(item => item.id === lead?.stageId);
     const owner = members.find(member => member.id === lead?.ownerId);
+    const isLearner = (lead?.audience || 'learner') === 'learner';
+    const feedback = data?.feedback;
 
     if (!lead) {
         return (
@@ -114,6 +143,32 @@ export const LeadDetail: React.FC<LeadDetailProps> = ({ workspaceId, leadId, nav
         }
     };
 
+    const logAttempt = async () => {
+        setBusy(true);
+        try {
+            const result = await logChallengeAttempt(lead.id);
+            toast.success(result.movedToStage ? `Attempt logged. Moved to ${result.movedToStage.name}.` : 'Challenge attempt logged.');
+            await reload();
+        } catch (e) {
+            toast.error(toErrorMessage(e));
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const requestFeedback = async () => {
+        setBusy(true);
+        try {
+            await requestLearnerFeedback(lead.id);
+            toast.success('Feedback requested.');
+            await reload();
+        } catch (e) {
+            toast.error(toErrorMessage(e));
+        } finally {
+            setBusy(false);
+        }
+    };
+
     const remove = async () => {
         setBusy(true);
         try {
@@ -151,9 +206,15 @@ export const LeadDetail: React.FC<LeadDetailProps> = ({ workspaceId, leadId, nav
                         <div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                                 <h1>{lead.name}</h1>
+                                <Badge tone="neutral">{LEAD_AUDIENCE_LABEL[lead.audience === 'institution' ? 'institution' : 'learner']}</Badge>
+                                {lead.quality && <Badge tone={LEAD_QUALITY_TONE[lead.quality]}>{LEAD_QUALITY_LABEL[lead.quality]}</Badge>}
                                 {lead.archived === 1 && <Badge tone="neutral">Archived</Badge>}
                             </div>
-                            <p>{lead.company || 'Independent'}{lead.jobTitle ? ` · ${lead.jobTitle}` : ''}</p>
+                            <p>
+                                {lead.company || 'Independent'}
+                                {lead.jobTitle ? ` · ${lead.jobTitle}` : ''}
+                                {lead.source ? ` · ${sourceLabel(lead.source)}` : ''}
+                            </p>
                         </div>
                     </div>
                     <div className="ws-detail-actions">
@@ -167,10 +228,21 @@ export const LeadDetail: React.FC<LeadDetailProps> = ({ workspaceId, leadId, nav
                     <div className="ws-detail-main">
                         <SectionCard>
                             <div className="ws-meta-grid" style={{ marginBottom: 16 }}>
-                                <MetaItem label="Deal value" value={formatMoney(lead.value)} hint="Potential value" />
-                                <MetaItem label="Stage" value={stage ? stage.name : '—'} hint={lead.priority.toUpperCase()} />
-                                <MetaItem label="Last contacted" value={lead.lastContactedAt ? formatDate(lead.lastContactedAt) : '—'} />
-                                <MetaItem label="Next follow-up" value={lead.nextFollowUpAt ? formatDateTime(lead.nextFollowUpAt) : '—'} />
+                                {isLearner ? (
+                                    <>
+                                        <MetaItem label="Stage" value={stage ? stage.name : '—'} hint={lead.priority.toUpperCase()} />
+                                        <MetaItem label="Lead quality" value={lead.quality ? LEAD_QUALITY_LABEL[lead.quality] : 'Not assessed'} hint={lead.persona ? LEARNER_PERSONA_LABEL[lead.persona] : 'Persona not set'} />
+                                        <MetaItem label="Activation" value={`${lead.challengeAttempts || 0} attempt${(lead.challengeAttempts || 0) === 1 ? '' : 's'}`} hint={lead.firstChallengeAt ? `First ${formatDate(lead.firstChallengeAt)}` : 'No challenge yet'} />
+                                        <MetaItem label="Feedback" value={FEEDBACK_STATUS_LABEL[lead.feedbackStatus || 'not_requested']} hint={feedback ? `Rated ${feedback.fdeHelpRating}/5` : 'Structured feedback'} />
+                                    </>
+                                ) : (
+                                    <>
+                                        <MetaItem label="Stage" value={stage ? stage.name : '—'} hint={lead.priority.toUpperCase()} />
+                                        <MetaItem label="Deal value" value={formatMoney(lead.value)} hint="No confirmed offer yet" />
+                                        <MetaItem label="Students reached" value={lead.studentCount !== undefined ? String(lead.studentCount) : '—'} hint={lead.institutionType || 'Institution'} />
+                                        <MetaItem label="Next follow-up" value={lead.nextFollowUpAt ? formatDateTime(lead.nextFollowUpAt) : '—'} />
+                                    </>
+                                )}
                             </div>
                             <div className="ws-subheading">Description</div>
                             {lead.description ? <p className="ws-task-description">{lead.description}</p> : <p className="ws-muted">No description yet.</p>}
@@ -180,6 +252,80 @@ export const LeadDetail: React.FC<LeadDetailProps> = ({ workspaceId, leadId, nav
                                 </div>
                             )}
                         </SectionCard>
+
+                        {isLearner && (
+                            <SectionCard
+                                title="Activation"
+                                description="Activation means a challenge attempt, not a sign-up."
+                            >
+                                <div className="ws-meta-grid" style={{ marginBottom: 14 }}>
+                                    <MetaItem label="Attempts" value={String(lead.challengeAttempts || 0)} hint="Challenges attempted" />
+                                    <MetaItem label="First challenge" value={lead.firstChallengeAt ? formatDateTime(lead.firstChallengeAt) : '—'} />
+                                    <MetaItem label="Last active" value={lead.lastActiveAt ? formatDateTime(lead.lastActiveAt) : '—'} />
+                                    <MetaItem label="Tracks" value={lead.tracksExplored?.length ? String(lead.tracksExplored.length) : '—'} hint={lead.tracksExplored?.slice(0, 2).join(', ')} />
+                                </div>
+                                {lead.tracksExplored && lead.tracksExplored.length > 0 && (
+                                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 14 }}>
+                                        {lead.tracksExplored.map(track => <Badge key={track} tone="blue">{track}</Badge>)}
+                                    </div>
+                                )}
+                                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                    <Button icon="plus" variant="primary" onClick={() => void logAttempt()} loading={busy}>Log challenge attempt</Button>
+                                    <Button variant="ghost" icon="edit" onClick={() => setEditing(true)}>Edit profile</Button>
+                                </div>
+                                {lead.dropOffReason && (
+                                    <div className="ws-feedback-note">
+                                        <div className="ws-subheading">Drop-off / pause reason</div>
+                                        <p>{lead.dropOffReason}</p>
+                                    </div>
+                                )}
+                            </SectionCard>
+                        )}
+
+                        {isLearner && (
+                            <SectionCard
+                                title="Learner feedback"
+                                description={feedback ? `Recorded ${formatDate(feedback.submittedAt)} · FDE help ${feedback.fdeHelpRating}/5` : 'Capture why they started, where they got stuck and whether ALGO helps FDE preparation.'}
+                                action={(
+                                    <div style={{ display: 'flex', gap: 6 }}>
+                                        {!feedback && lead.feedbackStatus !== 'requested' && (
+                                            <Button size="sm" variant="ghost" icon="send" onClick={() => void requestFeedback()} loading={busy}>Request</Button>
+                                        )}
+                                        <Button size="sm" variant={feedback ? 'secondary' : 'primary'} icon={feedback ? 'edit' : 'plus'} onClick={() => setFeedbackOpen(true)}>
+                                            {feedback ? 'Edit feedback' : 'Record feedback'}
+                                        </Button>
+                                    </div>
+                                )}
+                            >
+                                {!feedback ? (
+                                    <EmptyState
+                                        compact
+                                        icon="message"
+                                        title={lead.feedbackStatus === 'requested' ? 'Feedback requested' : 'No structured feedback yet'}
+                                        description={lead.feedbackStatus === 'requested' ? 'The learner has been asked. Record their answers here when they reply.' : 'A feedback conversation is the success signal for the first cohort.'}
+                                    />
+                                ) : (
+                                    <div className="ws-feedback-detail">
+                                        <div className="ws-feedback-grid">
+                                            <MetaItem label="Stuck at" value={STUCK_CATEGORY_LABEL[feedback.stuckCategory]} />
+                                            <MetaItem label="FDE help" value={`${feedback.fdeHelpRating}/5`} />
+                                            <MetaItem label="Tracks" value={feedback.tracksExplored.length ? String(feedback.tracksExplored.length) : '—'} />
+                                            <MetaItem label="Follow-up" value={feedback.consentToContact ? 'Open' : 'Not requested'} />
+                                        </div>
+                                        {feedback.themes.length > 0 && (
+                                            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', margin: '12px 0' }}>
+                                                {feedback.themes.map(theme => <Badge key={theme} tone="purple">{FEEDBACK_THEME_LABEL[theme]}</Badge>)}
+                                            </div>
+                                        )}
+                                        <div className="ws-feedback-answer"><span>Why they started</span><p>{feedback.whyStarted}</p></div>
+                                        <div className="ws-feedback-answer"><span>Where they got stuck</span><p>{feedback.whereStuck}</p></div>
+                                        {feedback.continuedReason && <div className="ws-feedback-answer"><span>Why they continued</span><p>{feedback.continuedReason}</p></div>}
+                                        {feedback.stoppedReason && <div className="ws-feedback-answer"><span>Why they stopped</span><p>{feedback.stoppedReason}</p></div>}
+                                        {feedback.recommendations && <div className="ws-feedback-answer"><span>What should change</span><p>{feedback.recommendations}</p></div>}
+                                    </div>
+                                )}
+                            </SectionCard>
+                        )}
 
                         <SectionCard title="Log activity" description="Calls, emails, meetings and follow-ups are added to the timeline.">
                             <form onSubmit={logActivity}>
@@ -247,7 +393,7 @@ export const LeadDetail: React.FC<LeadDetailProps> = ({ workspaceId, leadId, nav
                         <SectionCard title="Pipeline">
                             <Field label="Current stage" htmlFor="lead-stage-change">
                                 <Select id="lead-stage-change" value={lead.stageId} onChange={e => void changeStage(e.target.value)}>
-                                    {data.stages.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                                    {stages.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
                                 </Select>
                             </Field>
                             <div style={{ marginTop: 12 }}>
@@ -273,7 +419,7 @@ export const LeadDetail: React.FC<LeadDetailProps> = ({ workspaceId, leadId, nav
                                 <div className="ws-info-row"><Icon name="globe" size={14} /><span className="ws-info-label">Website</span><span className="ws-info-value">{lead.website ? <a href={lead.website} target="_blank" rel="noreferrer">{lead.website.replace(/^https?:\/\//, '')}</a> : <span className="ws-info-empty">—</span>}</span></div>
                                 <div className="ws-info-row"><Icon name="map-pin" size={14} /><span className="ws-info-label">Location</span><span className="ws-info-value">{lead.location || <span className="ws-info-empty">—</span>}</span></div>
                                 <div className="ws-info-row"><Icon name="briefcase" size={14} /><span className="ws-info-label">Industry</span><span className="ws-info-value">{lead.industry || <span className="ws-info-empty">—</span>}</span></div>
-                                <div className="ws-info-row"><Icon name="tag" size={14} /><span className="ws-info-label">Source</span><span className="ws-info-value">{lead.source || <span className="ws-info-empty">—</span>}</span></div>
+                                <div className="ws-info-row"><Icon name="tag" size={14} /><span className="ws-info-label">Source</span><span className="ws-info-value">{lead.source ? sourceLabel(lead.source) : <span className="ws-info-empty">—</span>}{lead.sourceDetail ? <span className="ws-info-sub">{lead.sourceDetail}</span> : null}</span></div>
                                 <div className="ws-info-row"><Icon name="user" size={14} /><span className="ws-info-label">Owner</span><span className="ws-info-value">{owner?.name || 'Unassigned'}</span></div>
                                 <div className="ws-info-row"><Icon name="clock" size={14} /><span className="ws-info-label">Created</span><span className="ws-info-value">{formatDate(lead.createdAt)}</span></div>
                             </div>
@@ -294,6 +440,17 @@ export const LeadDetail: React.FC<LeadDetailProps> = ({ workspaceId, leadId, nav
                 onClose={() => setEditing(false)}
                 onSaved={() => void reload()}
             />
+
+            {isLearner && (
+                <FeedbackForm
+                    open={feedbackOpen}
+                    leadId={lead.id}
+                    leadName={lead.name}
+                    existing={feedback}
+                    onClose={() => setFeedbackOpen(false)}
+                    onSaved={() => void reload()}
+                />
+            )}
 
             <ConfirmDialog
                 open={confirmDelete}

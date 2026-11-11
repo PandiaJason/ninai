@@ -1,6 +1,7 @@
 export type ModuleId =
     | 'dashboard'
     | 'crm'
+    | 'analytics'
     | 'projects'
     | 'followups'
     | 'tasks'

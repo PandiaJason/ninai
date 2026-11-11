@@ -1,13 +1,25 @@
 import {
     db,
+    type FeedbackStatus,
     type Lead,
     type LeadActivity,
     type LeadActivityType,
+    type LeadAudience,
+    type LeadQuality,
     type LeadStage,
+    type LearnerPersona,
     type Priority,
     type Tag,
 } from '../db';
 import { requireUser, type SessionUser } from './auth';
+import {
+    LEAD_QUALITY_LABEL,
+    LEARNER_PERSONA_LABEL,
+    normalizeSource,
+    sourceLabel,
+    stageAudience,
+    stagesForAudience,
+} from './algo';
 import { AppError } from './errors';
 import {
     assertLeadEdit,
@@ -27,6 +39,10 @@ import {
 } from './validation';
 import { downloadCsv, toCsv } from '../utils/csv';
 
+const LEAD_QUALITIES: LeadQuality[] = ['genuine', 'exploring', 'generic', 'not_fit'];
+const LEARNER_PERSONAS: LearnerPersona[] = ['final_year', 'recent_grad', 'early_career', 'career_switcher', 'institution', 'other'];
+const FEEDBACK_STATUSES: FeedbackStatus[] = ['not_requested', 'requested', 'submitted'];
+
 export interface LeadWithMeta extends Lead {
     stage?: LeadStage;
     ownerName: string;
@@ -42,6 +58,7 @@ export interface LeadInput {
     website?: string;
     jobTitle?: string;
     source?: string;
+    sourceDetail?: string;
     industry?: string;
     location?: string;
     ownerId?: string;
@@ -51,20 +68,33 @@ export interface LeadInput {
     description?: string;
     tags?: string[];
     nextFollowUpAt?: number | null;
+    audience?: LeadAudience;
+    persona?: LearnerPersona;
+    quality?: LeadQuality;
+    firstChallengeAt?: number | null;
+    challengeAttempts?: number | null;
+    tracksExplored?: string[];
+    lastActiveAt?: number | null;
+    feedbackStatus?: FeedbackStatus;
+    dropOffReason?: string;
+    institutionType?: string;
+    studentCount?: number | null;
 }
 
-export async function listLeadStages(workspaceId: string): Promise<LeadStage[]> {
+export async function listLeadStages(workspaceId: string, audience?: LeadAudience): Promise<LeadStage[]> {
     const user = await requireUser();
     await assertWorkspaceAccess(user, workspaceId);
-    return db.leadStages.where('workspaceId').equals(workspaceId).sortBy('order');
+    const stages = await db.leadStages.where('workspaceId').equals(workspaceId).toArray();
+    return (audience ? stagesForAudience(stages, audience) : stages.sort((a, b) => a.order - b.order));
 }
 
-export async function listLeads(workspaceId: string, includeArchived = false): Promise<LeadWithMeta[]> {
+export async function listLeads(workspaceId: string, includeArchived = false, audience?: LeadAudience): Promise<LeadWithMeta[]> {
     const user = await requireUser();
     await assertWorkspaceAccess(user, workspaceId);
 
     const leads = await db.leads.where('workspaceId').equals(workspaceId).toArray();
-    const filtered = includeArchived ? leads : leads.filter(l => !l.archived);
+    const filtered = (includeArchived ? leads : leads.filter(l => !l.archived))
+        .filter(lead => !audience || (lead.audience || 'learner') === audience);
     const stages = await db.leadStages.where('workspaceId').equals(workspaceId).toArray();
     const stageMap = new Map(stages.map(s => [s.id, s]));
     const users = await db.users.bulkGet(Array.from(new Set(filtered.map(l => l.ownerId))));
@@ -93,6 +123,26 @@ export async function getLead(leadId: string): Promise<Lead> {
     return lead;
 }
 
+function optionalEnum<T extends string>(value: string | undefined, allowed: readonly T[], label: string): T | undefined {
+    if (value === undefined || value === '') return undefined;
+    if (!allowed.includes(value as T)) throw new AppError('VALIDATION', `Invalid ${label}.`);
+    return value as T;
+}
+
+function cleanTracks(value: string[] | undefined): string[] | undefined {
+    if (value === undefined) return undefined;
+    return Array.from(new Set(value.map(item => item.trim()).filter(Boolean)))
+        .slice(0, 30)
+        .map(item => item.slice(0, 80));
+}
+
+function optionalTimestamp(value: number | null | undefined, label: string): number | undefined {
+    if (value === undefined) return undefined;
+    if (value === null) return undefined;
+    if (!Number.isFinite(value) || value < 0) throw new AppError('VALIDATION', `${label} is invalid.`);
+    return value;
+}
+
 async function normalizeLead(
     actor: SessionUser,
     workspaceId: string,
@@ -100,12 +150,16 @@ async function normalizeLead(
     existing?: Lead,
 ): Promise<Omit<Lead, 'id' | 'createdAt' | 'createdBy'>> {
     const name = required(input.name ?? existing?.name, 'Lead name', 120);
-    const stages = await db.leadStages.where('workspaceId').equals(workspaceId).toArray();
-    if (stages.length === 0) throw new AppError('VALIDATION', 'No pipeline stages are configured for this workspace.');
+    const allStages = await db.leadStages.where('workspaceId').equals(workspaceId).toArray();
+    if (allStages.length === 0) throw new AppError('VALIDATION', 'No pipeline stages are configured for this workspace.');
+
+    const audience: LeadAudience = input.audience ?? existing?.audience ?? 'learner';
+    const stages = stagesForAudience(allStages, audience);
+    if (stages.length === 0) throw new AppError('VALIDATION', `No ${audience} pipeline stages are configured.`);
 
     const requestedStageId = input.stageId ?? existing?.stageId;
-    const stage = requestedStageId ? stages.find(s => s.id === requestedStageId) : stages.sort((a, b) => a.order - b.order)[0];
-    if (!stage) throw new AppError('VALIDATION', 'The selected pipeline stage does not exist.');
+    const stage = requestedStageId ? stages.find(s => s.id === requestedStageId) : stages[0];
+    if (!stage) throw new AppError('VALIDATION', 'The selected pipeline stage does not belong to this pipeline.');
 
     const ownerId = input.ownerId ?? existing?.ownerId ?? actor.id;
     const membership = await db.workspaceMembers.where('[workspaceId+userId]').equals([workspaceId, ownerId]).first();
@@ -121,6 +175,24 @@ async function normalizeLead(
             ? undefined
             : input.nextFollowUpAt;
 
+    const firstChallengeAt = input.firstChallengeAt === undefined
+        ? existing?.firstChallengeAt
+        : optionalTimestamp(input.firstChallengeAt, 'First challenge date');
+    const lastActiveAt = input.lastActiveAt === undefined
+        ? existing?.lastActiveAt
+        : optionalTimestamp(input.lastActiveAt, 'Last active date');
+    const challengeAttempts = input.challengeAttempts === undefined
+        ? (existing?.challengeAttempts ?? 0)
+        : Math.floor(numberValue(input.challengeAttempts ?? 0, 'Challenge attempts', 0, 1_000_000));
+    const feedbackStatus = input.feedbackStatus === undefined
+        ? (existing?.feedbackStatus ?? 'not_requested')
+        : oneOf(input.feedbackStatus, FEEDBACK_STATUSES, 'Feedback status');
+    const studentCount = input.studentCount === undefined
+        ? existing?.studentCount
+        : input.studentCount === null
+            ? undefined
+            : Math.floor(numberValue(input.studentCount, 'Student count', 0, 1_000_000));
+
     return {
         workspaceId,
         name,
@@ -129,7 +201,8 @@ async function normalizeLead(
         phone: optional(input.phone ?? existing?.phone, 'Phone number', 60),
         website: validateWebsite(input.website ?? existing?.website),
         jobTitle: optional(input.jobTitle ?? existing?.jobTitle, 'Job title', 120),
-        source: optional(input.source ?? existing?.source, 'Lead source', 120),
+        source: normalizeSource(input.source ?? existing?.source),
+        sourceDetail: optional(input.sourceDetail ?? existing?.sourceDetail, 'Source detail', 300),
         industry: optional(input.industry ?? existing?.industry, 'Industry', 120),
         location: optional(input.location ?? existing?.location, 'Location', 160),
         ownerId,
@@ -142,6 +215,17 @@ async function normalizeLead(
         nextFollowUpAt,
         archived: existing?.archived ?? 0,
         convertedAt: stage.isWon ? (existing?.convertedAt ?? Date.now()) : existing?.convertedAt,
+        audience,
+        persona: optionalEnum(input.persona ?? existing?.persona, LEARNER_PERSONAS, 'persona'),
+        quality: optionalEnum(input.quality ?? existing?.quality, LEAD_QUALITIES, 'lead quality'),
+        firstChallengeAt,
+        challengeAttempts,
+        tracksExplored: input.tracksExplored === undefined ? existing?.tracksExplored : cleanTracks(input.tracksExplored),
+        lastActiveAt,
+        feedbackStatus,
+        dropOffReason: optional(input.dropOffReason ?? existing?.dropOffReason, 'Drop-off reason', 2000),
+        institutionType: optional(input.institutionType ?? existing?.institutionType, 'Institution type', 120),
+        studentCount,
     };
 }
 
@@ -231,6 +315,9 @@ export async function moveLeadStage(leadId: string, stageId: string): Promise<vo
     if (!stage || stage.workspaceId !== lead.workspaceId) {
         throw new AppError('VALIDATION', 'That pipeline stage is not part of this workspace.');
     }
+    if (stageAudience(stage) !== (lead.audience || 'learner')) {
+        throw new AppError('VALIDATION', 'Move this record inside its own pipeline.');
+    }
 
     await db.leads.update(leadId, {
         stageId,
@@ -287,7 +374,7 @@ export async function addLeadActivity(leadId: string, input: {
     if (!lead) throw new AppError('NOT_FOUND', 'Lead not found.');
     await assertWorkspaceAccess(actor, lead.workspaceId);
 
-    const type = oneOf(input.type, ['call', 'email', 'meeting', 'message', 'follow_up', 'note', 'update', 'stage_change'] as const, 'Activity type');
+    const type = oneOf(input.type, ['call', 'email', 'meeting', 'message', 'follow_up', 'note', 'update', 'stage_change', 'challenge', 'feedback', 'activation'] as const, 'Activity type');
     const subject = required(input.subject, 'Activity subject', 200);
     const body = optional(input.body, 'Activity notes', 4000) || '';
     const occurredAt = input.occurredAt || Date.now();
@@ -319,6 +406,110 @@ export async function addLeadActivity(leadId: string, input: {
         title: `${subject} — ${lead.name}`,
     });
     return activity;
+}
+
+export interface ChallengeAttemptResult {
+    lead: Lead;
+    movedToStage?: LeadStage;
+}
+
+export async function logChallengeAttempt(
+    leadId: string,
+    input: { count?: number; track?: string } = {},
+): Promise<ChallengeAttemptResult> {
+    const actor = await requireUser();
+    const lead = await db.leads.get(leadId);
+    if (!lead) throw new AppError('NOT_FOUND', 'Lead not found.');
+    await assertWorkspaceAccess(actor, lead.workspaceId);
+    await assertLeadEdit(actor, lead);
+
+    const count = Math.floor(numberValue(input.count ?? 1, 'Challenge attempts', 1, 50));
+    const now = Date.now();
+    const stages = await listLeadStages(lead.workspaceId, lead.audience || 'learner');
+    const current = stages.find(stage => stage.id === lead.stageId);
+    const stageByName = (name: string) => stages.find(stage => stage.name.trim().toLowerCase() === name);
+    const activated = stageByName('activated');
+    const engaged = stageByName('engaged');
+    const lost = stages.find(stage => stage.isLost === 1);
+    const feedback = stages.find(stage => stage.isWon === 1);
+    const currentOrder = current?.order ?? -1;
+    const attempts = (lead.challengeAttempts || 0) + count;
+    const tracks = cleanTracks([...(lead.tracksExplored || []), ...(input.track ? [input.track] : [])]) || [];
+
+    let nextStage = current;
+    if (current?.id !== lost?.id && current?.id !== feedback?.id) {
+        if (engaged && attempts >= 3 && currentOrder < engaged.order) nextStage = engaged;
+        else if (activated && currentOrder < activated.order) nextStage = activated;
+    }
+
+    const updated: Lead = {
+        ...lead,
+        challengeAttempts: attempts,
+        firstChallengeAt: lead.firstChallengeAt ?? now,
+        lastActiveAt: now,
+        tracksExplored: tracks,
+        stageId: nextStage?.id || lead.stageId,
+        feedbackStatus: lead.feedbackStatus || 'not_requested',
+        updatedAt: now,
+    };
+    await db.leads.put(updated);
+    await db.leadActivities.add({
+        id: crypto.randomUUID(),
+        workspaceId: lead.workspaceId,
+        leadId,
+        type: 'challenge',
+        subject: `Challenge attempt${count === 1 ? '' : 's'} logged (${count})`,
+        body: input.track ? `Track: ${input.track}` : '',
+        occurredAt: now,
+        createdAt: now,
+        userId: actor.id,
+    });
+    await logActivity({
+        workspaceId: lead.workspaceId,
+        userId: actor.id,
+        entityType: 'lead',
+        entityId: leadId,
+        action: 'challenge_logged',
+        title: `${lead.name} attempted ${count} challenge${count === 1 ? '' : 's'}`,
+    });
+
+    return {
+        lead: updated,
+        movedToStage: nextStage && nextStage.id !== lead.stageId ? nextStage : undefined,
+    };
+}
+
+export async function requestLearnerFeedback(leadId: string): Promise<void> {
+    const actor = await requireUser();
+    const lead = await db.leads.get(leadId);
+    if (!lead) throw new AppError('NOT_FOUND', 'Lead not found.');
+    await assertWorkspaceAccess(actor, lead.workspaceId);
+    await assertLeadEdit(actor, lead);
+    if ((lead.audience || 'learner') !== 'learner') {
+        throw new AppError('VALIDATION', 'Feedback requests are only available for learners.');
+    }
+
+    const now = Date.now();
+    await db.leads.update(leadId, { feedbackStatus: 'requested', updatedAt: now });
+    await db.leadActivities.add({
+        id: crypto.randomUUID(),
+        workspaceId: lead.workspaceId,
+        leadId,
+        type: 'feedback',
+        subject: 'Structured feedback requested',
+        body: '',
+        occurredAt: now,
+        createdAt: now,
+        userId: actor.id,
+    });
+    await logActivity({
+        workspaceId: lead.workspaceId,
+        userId: actor.id,
+        entityType: 'lead',
+        entityId: leadId,
+        action: 'feedback_requested',
+        title: `Requested feedback from ${lead.name}`,
+    });
 }
 
 export async function listLeadActivities(leadId: string): Promise<LeadActivity[]> {
@@ -356,13 +547,15 @@ export async function deleteLead(leadId: string): Promise<void> {
 
     await db.transaction('rw', [
         db.leads, db.leadActivities, db.projectLeads, db.tasks, db.calendarEvents,
-        db.recordTags, db.noteLinks, db.activities,
+        db.recordTags, db.noteLinks, db.activities, db.followUps, db.learnerFeedback,
     ], async () => {
         await db.leads.delete(leadId);
         await db.leadActivities.where('leadId').equals(leadId).delete();
         await db.projectLeads.where('leadId').equals(leadId).delete();
         await db.tasks.where('leadId').equals(leadId).modify({ leadId: undefined });
         await db.calendarEvents.where('leadId').equals(leadId).modify({ leadId: undefined });
+        await db.followUps.where('[entityType+entityId]').equals(['lead', leadId]).delete();
+        await db.learnerFeedback.where('leadId').equals(leadId).delete();
         await db.recordTags.where('[entityType+entityId]').equals(['lead', leadId]).delete();
         await db.noteLinks.where('[entityType+entityId]').equals(['lead', leadId]).delete();
         await db.activities.where('[entityType+entityId]').equals(['lead', leadId]).delete();
@@ -419,7 +612,7 @@ export async function importLeads(
 ): Promise<LeadImportResult> {
     const actor = await requireUser();
     await assertWorkspaceAccess(actor, workspaceId);
-    const stages = await db.leadStages.where('workspaceId').equals(workspaceId).toArray();
+    const allStages = await db.leadStages.where('workspaceId').equals(workspaceId).toArray();
     const users = await db.users.toArray();
     const existingLeads = await db.leads.where('workspaceId').equals(workspaceId).toArray();
     const seen = new Set<string>();
@@ -447,10 +640,14 @@ export async function importLeads(
         const value = rawValue ? Number(rawValue) : 0;
         if (!Number.isFinite(value) || value < 0) errors.push('Deal value must be a positive number');
 
+        const audience: LeadAudience = /institution|college|university/i.test(row.audience || '')
+            ? 'institution'
+            : 'learner';
+        const stages = stagesForAudience(allStages, audience);
         const stageName = (row.stage || '').trim();
         const stage = stageName
             ? stages.find(s => s.name.toLowerCase() === stageName.toLowerCase() || s.id === stageName)
-            : stages.sort((a, b) => a.order - b.order)[0];
+            : stages[0];
         if (!stage) errors.push('Pipeline stage not found');
 
         const ownerQuery = (row.owner || '').trim().toLowerCase();
@@ -467,18 +664,38 @@ export async function importLeads(
             continue;
         }
 
+        const qualityText = (row.quality || '').trim().toLowerCase().replace(/\s+/g, '_');
+        const quality = LEAD_QUALITIES.includes(qualityText as LeadQuality)
+            ? qualityText as LeadQuality
+            : /genuine|fde/.test(qualityText) ? 'genuine'
+                : /generic|dsa|placement/.test(qualityText) ? 'generic'
+                    : /not.?fit/.test(qualityText) ? 'not_fit'
+                        : /explor/.test(qualityText) ? 'exploring' : undefined;
+        const personaText = (row.persona || '').trim().toLowerCase().replace(/\s+/g, '_');
+        const persona = LEARNER_PERSONAS.includes(personaText as LearnerPersona)
+            ? personaText as LearnerPersona
+            : /final/.test(personaText) ? 'final_year'
+                : /recent|graduate/.test(personaText) ? 'recent_grad'
+                    : /early/.test(personaText) ? 'early_career'
+                        : /switch/.test(personaText) ? 'career_switcher'
+                            : /institution|college/.test(personaText) ? 'institution' : undefined;
+        const attempts = Math.max(0, Math.floor(Number((row.attempts || row.challengeAttempts || '0').replace(/[^0-9.]/g, '')) || 0));
+        const firstChallenge = (row.firstChallenge || '').trim();
+        const firstChallengeAt = firstChallenge ? new Date(firstChallenge).getTime() : undefined;
+
         const candidate: Lead = {
             id: crypto.randomUUID(),
             workspaceId,
             name,
-            company: (row.company || '').trim() || undefined,
+            company: (row.company || row.institution || '').trim() || undefined,
             email,
             phone: (row.phone || '').trim() || undefined,
             website,
-            jobTitle: (row.jobTitle || row.title || '').trim() || undefined,
-            source: (row.source || '').trim() || undefined,
+            jobTitle: (row.jobTitle || row.title || row.role || '').trim() || undefined,
+            source: normalizeSource((row.source || '').trim()) || undefined,
+            sourceDetail: (row.sourceDetail || row.campaign || '').trim() || undefined,
             industry: (row.industry || '').trim() || undefined,
-            location: (row.location || '').trim() || undefined,
+            location: (row.location || row.city || '').trim() || undefined,
             ownerId: owner.id,
             stageId: stage.id,
             priority,
@@ -488,6 +705,17 @@ export async function importLeads(
             updatedAt: Date.now(),
             archived: 0,
             createdBy: actor.id,
+            audience,
+            persona,
+            quality,
+            firstChallengeAt: Number.isFinite(firstChallengeAt) ? firstChallengeAt : undefined,
+            challengeAttempts: attempts,
+            tracksExplored: (row.tracks || '').split(/[;,]/).map(item => item.trim()).filter(Boolean),
+            lastActiveAt: undefined,
+            feedbackStatus: 'not_requested',
+            dropOffReason: (row.dropOffReason || row.dropoff || '').trim() || undefined,
+            institutionType: (row.institutionType || '').trim() || undefined,
+            studentCount: Number((row.students || row.studentCount || '').replace(/[^0-9.]/g, '')) || undefined,
         };
 
         const keys = duplicateKeys(candidate);
@@ -529,6 +757,7 @@ export async function exportLeadsCsv(workspaceId: string, leadIds: string[]): Pr
         const l = lead!;
         return [
             l.name,
+            l.audience || 'learner',
             l.company || '',
             l.email || '',
             l.phone || '',
@@ -537,9 +766,20 @@ export async function exportLeadsCsv(workspaceId: string, leadIds: string[]): Pr
             stageMap.get(l.stageId) || '',
             l.priority,
             l.value,
-            l.source || '',
+            sourceLabel(l.source),
+            l.sourceDetail || '',
+            l.persona ? LEARNER_PERSONA_LABEL[l.persona] : '',
+            l.quality ? LEAD_QUALITY_LABEL[l.quality] : '',
             l.industry || '',
             l.location || '',
+            l.institutionType || '',
+            l.studentCount ?? '',
+            l.challengeAttempts || 0,
+            l.tracksExplored?.join('; ') || '',
+            l.firstChallengeAt ? new Date(l.firstChallengeAt).toISOString() : '',
+            l.lastActiveAt ? new Date(l.lastActiveAt).toISOString() : '',
+            l.feedbackStatus || 'not_requested',
+            l.dropOffReason || '',
             userMap.get(l.ownerId)?.name || '',
             userMap.get(l.ownerId)?.email || '',
             l.description || '',
@@ -551,8 +791,10 @@ export async function exportLeadsCsv(workspaceId: string, leadIds: string[]): Pr
     });
 
     return toCsv([
-        'Lead Name', 'Company', 'Email', 'Phone', 'Website', 'Job Title', 'Stage', 'Priority',
-        'Deal Value', 'Source', 'Industry', 'Location', 'Owner Name', 'Owner Email', 'Description',
+        'Lead Name', 'Audience', 'Company', 'Email', 'Phone', 'Website', 'Job Title', 'Stage', 'Priority',
+        'Deal Value', 'Source', 'Source Detail', 'Persona', 'Quality', 'Industry', 'Location',
+        'Institution Type', 'Student Count', 'Challenge Attempts', 'Tracks', 'First Challenge',
+        'Last Active', 'Feedback Status', 'Drop-off Reason', 'Owner Name', 'Owner Email', 'Description',
         'Tags', 'Last Contacted', 'Next Follow-up', 'Created At',
     ], rows);
 }

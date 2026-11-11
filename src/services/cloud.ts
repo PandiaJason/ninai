@@ -145,6 +145,6 @@ function countEntities(payload: any): number {
     return [
         'notes', 'folders', 'leads', 'leadActivities', 'projects', 'projectMilestones',
         'tasks', 'subtasks', 'taskComments', 'calendarEvents', 'tags', 'recordTags',
-        'noteLinks', 'notifications', 'activities', 'followUps',
+        'noteLinks', 'notifications', 'activities', 'followUps', 'learnerFeedback',
     ].reduce((sum, key) => sum + (Array.isArray(payload?.[key]) ? payload[key].length : 0), 0);
 }

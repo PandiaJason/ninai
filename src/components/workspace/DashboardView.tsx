@@ -43,8 +43,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ workspaceId, userI
                     )}
                 />
 
-                <div className="ws-grid ws-grid-3" style={{ marginBottom: 18 }}>
-                    <StatCard label="Active leads" value={stats.totalLeads} hint={`${stats.newLeads} new · ${stats.qualifiedLeads} qualified`} icon="crm" tone="blue" onClick={() => nav.go('crm')} />
+                <div className="ws-grid ws-grid-4" style={{ marginBottom: 18 }}>
+                    <StatCard label="Active records" value={stats.totalLeads} hint={`${stats.learners} learners · ${stats.institutions} institutions`} icon="crm" tone="blue" onClick={() => nav.go('crm')} />
+                    <StatCard label="ALGO activation" value={stats.activatedLearners} hint={`${stats.feedbackReceived} feedback · ${stats.qualifiedLeads} engaged`} icon="target" tone="green" onClick={() => nav.go('analytics')} />
                     <StatCard label="Open tasks" value={stats.pendingTasks} hint={`${stats.overdueTasks} overdue · ${stats.myOpenTasks} assigned to you`} icon="tasks" tone="orange" onClick={() => nav.go('tasks')} />
                     <StatCard label="Follow-ups" value={stats.pendingFollowUps} hint={`${stats.overdueFollowUps} overdue · ${stats.activeProjects} active projects`} icon="followups" tone={stats.overdueFollowUps ? 'red' : 'purple'} onClick={() => nav.go('followups')} />
                 </div>
@@ -52,8 +53,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ workspaceId, userI
                 <div className="ws-grid" style={{ gridTemplateColumns: 'minmax(0, 1.35fr) minmax(0, 1fr)', gap: 18 }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
                         <SectionCard
-                            title="Recent leads"
-                            description="The newest opportunities in your pipeline."
+                            title="Recent records"
+                            description="The newest learners and institutions in your pipeline."
                             action={<Button size="sm" variant="ghost" icon="arrow-right" onClick={() => nav.go('crm')}>View all</Button>}
                             padded={false}
                         >
@@ -73,7 +74,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ workspaceId, userI
                                                         <div className="cell-sub">{lead.company || 'Independent'}</div>
                                                     </td>
                                                     <td>{lead.stage && <Badge tone="blue" dot color={lead.stage.color}>{lead.stage.name}</Badge>}</td>
-                                                    <td className="cell-right cell-mono">{formatMoney(lead.value)}</td>
+                                                    <td className="cell-right cell-mono">{lead.audience === 'institution' ? formatMoney(lead.value) : `${lead.challengeAttempts || 0} attempts`}</td>
                                                     <td className="cell-right"><Icon name="chevron-right" size={14} /></td>
                                                 </tr>
                                             ))}

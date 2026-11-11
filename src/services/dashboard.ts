@@ -19,6 +19,10 @@ export interface DashboardStats {
     qualifiedLeads: number;
     inProgressLeads: number;
     convertedLeads: number;
+    learners: number;
+    activatedLearners: number;
+    feedbackReceived: number;
+    institutions: number;
     pendingTasks: number;
     overdueTasks: number;
     upcomingDeadlines: number;
@@ -75,8 +79,10 @@ export async function getDashboardData(workspaceId: string, userId: string): Pro
     const userMap = new Map(users.map(u => [u.id, u]));
     const stageMap = new Map(stages.map(s => [s.id, s]));
 
-    const newStageIds = new Set(stages.filter(s => s.name.trim().toLowerCase() === 'new' || s.order === 0).map(s => s.id));
-    const qualifiedStageIds = new Set(stages.filter(s => s.name.trim().toLowerCase() === 'qualified').map(s => s.id));
+    const activeLearners = activeLeads.filter(l => (l.audience || 'learner') === 'learner');
+    const activeInstitutions = activeLeads.filter(l => l.audience === 'institution');
+    const newStageIds = new Set(stages.filter(s => s.order === 0).map(s => s.id));
+    const engagedStageIds = new Set(stages.filter(s => s.name.trim().toLowerCase() === 'engaged').map(s => s.id));
     const wonStageIds = new Set(stages.filter(s => s.isWon === 1).map(s => s.id));
     const lostStageIds = new Set(stages.filter(s => s.isLost === 1).map(s => s.id));
 
@@ -100,9 +106,13 @@ export async function getDashboardData(workspaceId: string, userId: string): Pro
     const stats: DashboardStats = {
         totalLeads: activeLeads.length,
         newLeads: activeLeads.filter(l => newStageIds.has(l.stageId)).length,
-        qualifiedLeads: activeLeads.filter(l => qualifiedStageIds.has(l.stageId)).length,
+        qualifiedLeads: activeLeads.filter(l => engagedStageIds.has(l.stageId)).length,
         inProgressLeads: activeLeads.filter(l => !newStageIds.has(l.stageId) && !wonStageIds.has(l.stageId) && !lostStageIds.has(l.stageId)).length,
         convertedLeads: activeLeads.filter(l => wonStageIds.has(l.stageId)).length,
+        learners: activeLearners.length,
+        activatedLearners: activeLearners.filter(l => !!l.firstChallengeAt || (l.challengeAttempts || 0) > 0 || l.feedbackStatus === 'submitted').length,
+        feedbackReceived: activeLearners.filter(l => l.feedbackStatus === 'submitted').length,
+        institutions: activeInstitutions.length,
         pendingTasks: pendingTasks.length,
         overdueTasks: overdue.length,
         upcomingDeadlines: upcomingTaskCount + upcomingFollowUps,

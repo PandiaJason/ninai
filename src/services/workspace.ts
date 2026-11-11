@@ -1,5 +1,6 @@
 import {
     db,
+    DEFAULT_INSTITUTION_STAGES,
     DEFAULT_STAGES,
     DEFAULT_WORKSPACE_ID,
     type Workspace,
@@ -98,6 +99,11 @@ export async function createWorkspace(input: { name: string; description?: strin
             id: `${stage.id}_${workspace.id}`,
             workspaceId: workspace.id,
         })));
+        await db.leadStages.bulkAdd(DEFAULT_INSTITUTION_STAGES.map(stage => ({
+            ...stage,
+            id: `${stage.id}_${workspace.id}`,
+            workspaceId: workspace.id,
+        })));
         await db.folders.add({
             id: crypto.randomUUID(),
             name: 'Notes',
@@ -139,7 +145,7 @@ export async function deleteWorkspace(workspaceId: string): Promise<void> {
         db.projects, db.projectMembers, db.projectLeads, db.projectMilestones, db.tasks,
         db.subtasks, db.taskComments, db.calendarEvents, db.tags, db.recordTags,
         db.noteLinks, db.notifications, db.activities, db.notes, db.folders,
-        db.followUps, db.workspaceVersions, db.syncState,
+        db.followUps, db.learnerFeedback, db.workspaceVersions, db.syncState,
     ], async () => {
         await db.workspaces.delete(workspaceId);
         await db.workspaceMembers.where('workspaceId').equals(workspaceId).delete();
@@ -168,6 +174,7 @@ export async function deleteWorkspace(workspaceId: string): Promise<void> {
         await db.notes.where('workspaceId').equals(workspaceId).delete();
         await db.folders.where('workspaceId').equals(workspaceId).delete();
         await db.followUps.where('workspaceId').equals(workspaceId).delete();
+        await db.learnerFeedback.where('workspaceId').equals(workspaceId).delete();
         await db.workspaceVersions.where('workspaceId').equals(workspaceId).delete();
         await db.syncState.where('workspaceId').equals(workspaceId).delete();
     });
@@ -307,11 +314,12 @@ export async function exportWorkspaceJson(workspaceId: string): Promise<string> 
     const projects = await db.projects.where('workspaceId').equals(workspaceId).toArray();
     const projectIds = projects.map(project => project.id);
     const taskIds = tasks.map(task => task.id);
-    const [projectMembers, projectLeads, projectMilestones, followUps, subtasks, taskComments, recordTags, noteLinks, notifications] = await Promise.all([
+    const [projectMembers, projectLeads, projectMilestones, followUps, learnerFeedback, subtasks, taskComments, recordTags, noteLinks, notifications] = await Promise.all([
         projectIds.length ? db.projectMembers.where('projectId').anyOf(projectIds).toArray() : Promise.resolve([]),
         projectIds.length ? db.projectLeads.where('projectId').anyOf(projectIds).toArray() : Promise.resolve([]),
         db.projectMilestones.where('workspaceId').equals(workspaceId).toArray(),
         db.followUps.where('workspaceId').equals(workspaceId).toArray(),
+        db.learnerFeedback.where('workspaceId').equals(workspaceId).toArray(),
         taskIds.length ? db.subtasks.where('taskId').anyOf(taskIds).toArray() : Promise.resolve([]),
         taskIds.length ? db.taskComments.where('taskId').anyOf(taskIds).toArray() : Promise.resolve([]),
         db.recordTags.where('workspaceId').equals(workspaceId).toArray(),
@@ -337,6 +345,7 @@ export async function exportWorkspaceJson(workspaceId: string): Promise<string> 
         subtasks,
         taskComments,
         followUps,
+        learnerFeedback,
         calendarEvents,
         tags,
         recordTags,
