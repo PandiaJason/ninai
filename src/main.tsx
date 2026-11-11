@@ -6,11 +6,6 @@ import App from './App.tsx'
 import { AuthProvider } from './context/AuthContext.tsx'
 import { ToastProvider } from './components/ui/Toast.tsx'
 
-// macOS uses a hidden-inset title bar, so the shell reserves space for the
-// traffic lights. Every other platform gets a compact, edge-to-edge sidebar.
-const isMac = /mac/i.test(navigator.userAgent)
-document.documentElement.classList.toggle('is-mac', isMac)
-
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AuthProvider>

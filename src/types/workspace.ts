@@ -9,7 +9,8 @@ export type ModuleId =
     | 'tasks'
     | 'notes'
     | 'calendar'
-    | 'settings';
+    | 'settings'
+    | 'tools';
 
 export interface WorkspaceNav {
     go: (module: ModuleId) => void;

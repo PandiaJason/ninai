@@ -13,8 +13,7 @@
     display: flex;
     flex-direction: column;
     align-items: stretch;
-    padding: 18px 10px 14px;
-    /* macOS reserves space for the traffic lights, see .is-mac below. */
+    padding: 14px 10px 14px;
     border-right: 1px solid var(--border-subtle);
     z-index: 10;
     position: relative;
@@ -25,8 +24,8 @@
     /* Allow dragging from sidebar */
 }
 
-/* macOS draws the traffic lights over the window, so keep room for them. */
-.is-mac .layout-sidebar {
+/* macOS draws the traffic lights over the top of the window. */
+.app-layout.mac-frame .layout-sidebar {
     padding-top: 40px;
 }
 

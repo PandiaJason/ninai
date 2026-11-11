@@ -6,6 +6,11 @@ import { Icon, type IconName } from './ui/Icon';
 import './Sidebar.css';
 
 interface SidebarProps {
+    tools: any[];
+    activeToolId: string;
+    onSelectTool: (id: string) => void;
+    onAddTool: (name: string, url: string) => void;
+    onDeleteTool: (id: string) => void;
     activeModule?: ModuleId;
     onSelectModule?: (module: ModuleId) => void;
     onOpenSearch?: () => void;
@@ -31,27 +36,36 @@ const SECONDARY_MODULES: { id: ModuleId; label: string; icon: IconName }[] = [
 ];
 
 interface SidebarItemProps {
+    id: string;
     label: string;
     icon: IconName;
     active: boolean;
     onSelect: () => void;
+    className?: string;
+    children?: React.ReactNode;
 }
 
-const SidebarItem: React.FC<SidebarItemProps> = ({ label, icon, active, onSelect }) => (
+const SidebarItem: React.FC<SidebarItemProps> = ({ label, icon, active, onSelect, className = '', children }) => (
     <button
         type="button"
-        className={`sidebar-item ${active ? 'active' : ''}`}
+        className={`sidebar-item ${active ? 'active' : ''} ${className}`}
         onClick={onSelect}
         aria-current={active ? 'page' : undefined}
+        title={label}
     >
         <span className="sidebar-item-icon">
-            <Icon name={icon} size={17} />
+            {children || <Icon name={icon} size={17} />}
         </span>
         <span className="sidebar-item-label">{label}</span>
     </button>
 );
 
 export const Sidebar: React.FC<SidebarProps> = ({
+    tools,
+    activeToolId,
+    onSelectTool,
+    onAddTool,
+    onDeleteTool,
     activeModule = 'dashboard',
     onSelectModule,
     onOpenSearch,
@@ -60,7 +74,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
     const [userName, setUserName] = useState(() => localStorage.getItem('ninai_username') || 'N');
     const [showProfileMenu, setShowProfileMenu] = useState(false);
+    const [isAdding, setIsAdding] = useState(false);
+    const [newName, setNewName] = useState('');
+    const [newUrl, setNewUrl] = useState('');
+    const [contextMenu, setContextMenu] = useState<{ x: number; y: number; toolId: string } | null>(null);
     const profileRef = useRef<HTMLDivElement>(null);
+    const addRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         localStorage.setItem('ninai_username', userName);
@@ -69,13 +88,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
     const userInitial = (Array.from(userName)[0] || 'N').toUpperCase();
 
     useEffect(() => {
-        if (!showProfileMenu) return;
+        const closeMenu = () => setContextMenu(null);
+        window.addEventListener('click', closeMenu);
+        return () => window.removeEventListener('click', closeMenu);
+    }, []);
+
+    useEffect(() => {
+        if (!showProfileMenu && !isAdding) return;
         const onPointerDown = (event: MouseEvent) => {
             const target = event.target as Node;
-            if (!profileRef.current?.contains(target)) setShowProfileMenu(false);
+            if (showProfileMenu && !profileRef.current?.contains(target)) setShowProfileMenu(false);
+            if (isAdding && !addRef.current?.contains(target)) setIsAdding(false);
         };
         const onKeyDown = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') setShowProfileMenu(false);
+            if (event.key !== 'Escape') return;
+            setShowProfileMenu(false);
+            setIsAdding(false);
         };
         document.addEventListener('mousedown', onPointerDown);
         document.addEventListener('keydown', onKeyDown);
@@ -83,7 +111,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
             document.removeEventListener('mousedown', onPointerDown);
             document.removeEventListener('keydown', onKeyDown);
         };
-    }, [showProfileMenu]);
+    }, [showProfileMenu, isAdding]);
+
+    const handleContextMenu = (event: React.MouseEvent, toolId: string) => {
+        event.preventDefault();
+        setContextMenu({ x: event.clientX, y: event.clientY, toolId });
+    };
+
+    const handleDelete = (id: string) => {
+        if (confirm('Remove this site from your tools?')) onDeleteTool(id);
+        setContextMenu(null);
+    };
+
+    const handleAddSubmit = (event: React.FormEvent) => {
+        event.preventDefault();
+        if (!newName.trim() || !newUrl.trim()) return;
+        onAddTool(newName.trim(), newUrl.trim());
+        setIsAdding(false);
+        setNewName('');
+        setNewUrl('');
+    };
 
     const handleFactoryReset = async () => {
         if (!confirm('Factory reset\n\nThis permanently deletes all your notes, folders and local workspace data. Continue?')) return;
@@ -102,8 +149,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
     const selectModule = (module: ModuleId) => {
         setShowProfileMenu(false);
+        setIsAdding(false);
         onSelectModule?.(module);
     };
+
+    const selectTool = (id: string) => {
+        setShowProfileMenu(false);
+        setIsAdding(false);
+        onSelectTool(id);
+    };
+
+    const toolIsActive = (id: string) => activeModule === 'tools' && activeToolId === id;
 
     return (
         <nav className="sidebar-nav" aria-label="Main navigation">
@@ -111,7 +167,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <button
                     type="button"
                     className="sidebar-avatar"
-                    onClick={() => setShowProfileMenu(value => !value)}
+                    onClick={() => {
+                        setIsAdding(false);
+                        setShowProfileMenu(value => !value);
+                    }}
                     title="Account"
                     aria-label="Account"
                     aria-haspopup="menu"
@@ -181,6 +240,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     {PRIMARY_MODULES.map(module => (
                         <SidebarItem
                             key={module.id}
+                            id={module.id}
                             label={module.label}
                             icon={module.icon}
                             active={activeModule === module.id}
@@ -194,6 +254,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     {SECONDARY_MODULES.map(module => (
                         <SidebarItem
                             key={module.id}
+                            id={module.id}
                             label={module.label}
                             icon={module.icon}
                             active={activeModule === module.id}
@@ -201,7 +262,98 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         />
                     ))}
                 </div>
+
+                <div className="sidebar-section tools" aria-label="Tools">
+                    <div className="sidebar-section-head">
+                        <span className="sidebar-section-label">Tools</span>
+                        <button
+                            type="button"
+                            className="sidebar-add-tool"
+                            onClick={() => {
+                                setShowProfileMenu(false);
+                                setIsAdding(value => !value);
+                            }}
+                            title="Add a site"
+                            aria-label="Add a site"
+                            aria-haspopup="dialog"
+                            aria-expanded={isAdding}
+                        >
+                            <Icon name="plus" size={14} />
+                        </button>
+                    </div>
+                    {tools.map(tool => (
+                        <SidebarItem
+                            key={tool.id}
+                            id={tool.id}
+                            label={tool.name}
+                            icon="globe"
+                            active={toolIsActive(tool.id)}
+                            onSelect={() => selectTool(tool.id)}
+                            className="sidebar-tool"
+                        >
+                            <span
+                                className="sidebar-tool-mark"
+                                style={{ color: tool.color, borderColor: `${tool.color}33`, background: `${tool.color}12` }}
+                                onContextMenu={event => handleContextMenu(event, tool.id)}
+                                title={`${tool.name} · right-click to remove`}
+                            >
+                                {tool.label}
+                            </span>
+                        </SidebarItem>
+                    ))}
+                    <button
+                        type="button"
+                        className="sidebar-item sidebar-add-site"
+                        onClick={() => {
+                            setShowProfileMenu(false);
+                            setIsAdding(value => !value);
+                        }}
+                    >
+                        <span className="sidebar-item-icon"><Icon name="plus" size={17} /></span>
+                        <span className="sidebar-item-label">Add site</span>
+                    </button>
+                </div>
             </div>
+
+            {isAdding && (
+                <div className="sidebar-popover sidebar-add-popover" ref={addRef} role="dialog" aria-label="Add a site">
+                    <h3>Add a site</h3>
+                    <p>Keep the tools you use beside your CRM.</p>
+                    <form onSubmit={handleAddSubmit}>
+                        <label>
+                            Name
+                            <input
+                                autoFocus
+                                placeholder="Perplexity"
+                                value={newName}
+                                onChange={event => setNewName(event.target.value)}
+                            />
+                        </label>
+                        <label>
+                            URL
+                            <input
+                                placeholder="perplexity.ai"
+                                value={newUrl}
+                                onChange={event => setNewUrl(event.target.value)}
+                            />
+                        </label>
+                        <div className="sidebar-popover-actions">
+                            <button type="button" onClick={() => setIsAdding(false)}>Cancel</button>
+                            <button type="submit" className="primary" disabled={!newName.trim() || !newUrl.trim()}>Add site</button>
+                        </div>
+                    </form>
+                </div>
+            )}
+
+            {contextMenu && (
+                <div
+                    className="sidebar-context-menu"
+                    style={{ top: contextMenu.y, left: contextMenu.x }}
+                    onClick={event => event.stopPropagation()}
+                >
+                    <button type="button" onClick={() => handleDelete(contextMenu.toolId)}>Remove site</button>
+                </div>
+            )}
         </nav>
     );
 };

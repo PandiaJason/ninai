@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Layout } from './components/Layout';
 import { Sidebar } from './components/Sidebar';
 import { NotesPanel } from './components/NotesPanel';
+import { ToolView } from './components/ToolView';
+import { TOOLS } from './data/tools';
 
 import { Onboarding } from './components/Onboarding';
 import { LoginScreen } from './components/auth/LoginScreen';
@@ -18,16 +20,59 @@ import { SettingsView } from './components/workspace/SettingsView';
 import { GlobalSearch } from './components/workspace/GlobalSearch';
 import type { ModuleId, WorkspaceNav } from './types/workspace';
 
-const MODULE_IDS: ModuleId[] = ['today', 'dashboard', 'crm', 'institutions', 'analytics', 'projects', 'followups', 'tasks', 'notes', 'calendar', 'settings'];
+const MODULE_IDS: ModuleId[] = ['today', 'dashboard', 'crm', 'institutions', 'analytics', 'projects', 'followups', 'tasks', 'notes', 'calendar', 'settings', 'tools'];
 
 function readModule(): ModuleId {
     const saved = localStorage.getItem('ninai_active_module') as ModuleId | null;
     return saved && MODULE_IDS.includes(saved) ? saved : 'dashboard';
 }
 
+// --- Tools State ---
 function App() {
     const { user, workspace, loading: authLoading, error: authError, logout } = useAuth();
     const [setupComplete, setSetupComplete] = useState(() => localStorage.getItem('ninai_setup_complete') === 'true');
+
+    const [tools, setTools] = useState(() => {
+        const saved = localStorage.getItem('ninai_tools');
+        let loaded = saved ? JSON.parse(saved) : TOOLS;
+
+        // Migration: Fix duplicate labels (G -> ✨, C -> Cl)
+        loaded = loaded.map((t: any) => {
+            if (t.id === 'gemini' && t.label === 'G') return { ...t, label: '✨' };
+            if (t.id === 'claude' && t.label === 'C') return { ...t, label: 'Cl' };
+            return t;
+        });
+
+        return loaded;
+    });
+
+    const [activeToolId, setActiveToolId] = useState(tools[0].id);
+    const activeTool = tools.find((t: any) => t.id === activeToolId) || tools[0];
+
+    useEffect(() => {
+        localStorage.setItem('ninai_tools', JSON.stringify(tools));
+    }, [tools]);
+
+    const handleAddTool = (name: string, url: string) => {
+        const newTool = {
+            id: Date.now().toString(),
+            name,
+            label: name.substring(0, 1).toUpperCase(),
+            color: '#86868b',
+            url: url.startsWith('http') ? url : `https://${url}`,
+            embeddable: true
+        };
+        setTools([...tools, newTool]);
+        setActiveToolId(newTool.id);
+    };
+
+    const handleDeleteTool = (id: string) => {
+        const newTools = tools.filter((t: any) => t.id !== id);
+        setTools(newTools);
+        if (activeToolId === id && newTools.length > 0) {
+            setActiveToolId(newTools[0].id);
+        }
+    };
 
     // --- Workspace Navigation ---
     const [activeModule, setActiveModule] = useState<ModuleId>(readModule);
@@ -75,7 +120,17 @@ function App() {
         openSearch: () => setSearchOpen(true),
     }), [go]);
 
-    // --- Layout State ---
+    // --- Zen Mode (Full Screen Notes) ---
+    const [zenMode, setZenMode] = useState(() => {
+        const saved = localStorage.getItem('ninai_zen_mode');
+        return saved !== null ? saved === 'true' : true; // Default to TRUE for "only note making mode"
+    });
+
+    useEffect(() => {
+        localStorage.setItem('ninai_zen_mode', zenMode.toString());
+    }, [zenMode]);
+
+    // --- Layout State (Notes panel) ---
     const [isNotesOpen, setIsNotesOpen] = useState(true);
 
     // Reset transient view state when the active workspace changes.
@@ -86,10 +141,13 @@ function App() {
             setSelectedProjectId(null);
             setSelectedTaskId(null);
             setExternalNoteId(null);
-            setActiveModule('dashboard');
+            setActiveModule(module => (module === 'tools' ? module : 'dashboard'));
         }
         prevWorkspaceId.current = workspace?.id;
     }, [workspace?.id]);
+
+    // --- Webview Integration (Smart Paste from Browser) ---
+    const toolRefs = useRef<Record<string, any>>({}); // Store refs to ToolViews
 
     // Global search shortcut
     useEffect(() => {
@@ -133,6 +191,34 @@ function App() {
         );
     }
 
+    // --- Webview Integration (Smart Paste from Browser) ---
+    const handleImportFromWebview = async (): Promise<{ text: string, html: string } | null> => {
+        const activeRef = toolRefs.current[activeToolId];
+        if (!activeRef) return null;
+
+        try {
+            const html = await activeRef.getSelectionHTML();
+            if (html) {
+                // Create a temporary element to strip text
+                const temp = document.createElement('div');
+                temp.innerHTML = html;
+                return { text: temp.innerText, html };
+            }
+        } catch (e) {
+            console.error("Failed to import from webview:", e);
+        }
+        return null;
+    };
+
+    const selectTool = (id: string) => {
+        const tool = tools.find((t: any) => t.id === id);
+        if (!tool) return;
+        setActiveToolId(tool.id);
+        setActiveModule('tools');
+        setZenMode(false);
+    };
+
+    const workspaceModule = activeModule !== 'tools';
     const notesModule = activeModule === 'notes';
 
     const renderModule = () => {
@@ -192,6 +278,7 @@ function App() {
             case 'settings':
                 return <SettingsView />;
             case 'notes':
+            case 'tools':
             default:
                 return null;
         }
@@ -202,6 +289,11 @@ function App() {
         <Layout
             sidebar={
                 <Sidebar
+                    tools={tools}
+                    activeToolId={activeTool.id}
+                    onSelectTool={selectTool}
+                    onAddTool={handleAddTool}
+                    onDeleteTool={handleDeleteTool}
                     activeModule={activeModule}
                     onSelectModule={go}
                     onOpenSearch={() => setSearchOpen(true)}
@@ -212,19 +304,44 @@ function App() {
             insightPanel={(
                 <NotesPanel
                     workspaceId={workspace.id}
+                    zenMode={notesModule ? false : zenMode}
+                    onToggleZenMode={() => setZenMode(!zenMode)}
+                    onImportFromWebview={handleImportFromWebview}
                     externalNoteId={externalNoteId}
                     onExternalNoteOpened={() => setExternalNoteId(null)}
-                    showZenToggle={false}
+                    showZenToggle={!notesModule}
                 />
             )}
-            zenMode={false}
+            zenMode={notesModule ? false : (activeModule === 'tools' ? zenMode : false)}
             fullNotes={notesModule}
-            notesLocked={!notesModule}
+            notesLocked={workspaceModule && !notesModule}
             contentHidden={notesModule}
             isNotesOpen={isNotesOpen}
             setNotesOpen={setIsNotesOpen}
         >
-            {!notesModule && renderModule()}
+            {/* Keep-Alive System: Render ALL tools, toggle visibility */}
+            <div style={{ display: activeModule === 'tools' ? 'block' : 'none', height: '100%', width: '100%' }}>
+                {tools.map((tool: any) => (
+                    <div
+                        key={tool.id}
+                        style={{
+                            display: activeTool.id === tool.id ? 'block' : 'none',
+                            height: '100%',
+                            width: '100%'
+                        }}
+                    >
+                        <ToolView
+                            ref={(el) => {
+                                if (el) toolRefs.current[tool.id] = el;
+                                else delete toolRefs.current[tool.id];
+                            }}
+                            tool={tool}
+                        />
+                    </div>
+                ))}
+            </div>
+
+            {workspaceModule && !notesModule && renderModule()}
         </Layout>
 
         <GlobalSearch

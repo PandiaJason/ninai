@@ -29,6 +29,8 @@ export const Layout: React.FC<LayoutProps> = ({
         return window.innerWidth * 0.5;
     });
     const [isResizing, setIsResizing] = React.useState(false);
+    // macOS uses a hidden inset title bar, so the sidebar keeps room for the traffic lights.
+    const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform || navigator.userAgent);
 
     const notesOnly = zenMode || fullNotes;
     const notesOpen = notesOnly ? true : notesLocked ? false : isNotesOpen;
@@ -110,7 +112,7 @@ export const Layout: React.FC<LayoutProps> = ({
     }, [resize, stopResizing]);
 
     return (
-        <div className={`app-layout ${isResizing ? 'resizing' : ''} ${zenMode ? 'zen-mode' : ''}`}>
+        <div className={`app-layout ${isResizing ? 'resizing' : ''} ${zenMode ? 'zen-mode' : ''} ${isMac ? 'mac-frame' : ''}`}>
             {!zenMode && (
                 <aside className="layout-sidebar glass">
                     {sidebar}
