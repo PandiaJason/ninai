@@ -32,6 +32,7 @@ import type { WorkspaceNav } from '../../types/workspace';
 import { useAuth } from '../../context/AuthContext';
 import { Avatar, Badge, Button, ConfirmDialog, EmptyState, IconButton, SectionCard } from '../ui/Misc';
 import { Icon } from '../ui/Icon';
+import { OverflowMenu, type OverflowMenuItem } from '../ui/OverflowMenu';
 import { Field, Select, TextArea, TextInput } from '../ui/Form';
 import { useToast } from '../ui/Toast';
 import { MetaItem, PriorityBadge, Timeline, formatMoney } from './shared';
@@ -196,6 +197,35 @@ export const LeadDetail: React.FC<LeadDetailProps> = ({ workspaceId, leadId, nav
         }
     };
 
+    const detailMenuItems: OverflowMenuItem[] = [
+        {
+            id: 'edit',
+            label: isLearner ? 'Edit learner' : 'Edit institution',
+            icon: 'edit',
+            onSelect: () => setEditing(true),
+        },
+        ...(isLearner ? [{
+            id: 'feedback',
+            label: feedback ? 'Edit feedback' : 'Record feedback',
+            icon: (feedback ? 'edit' : 'plus') as 'edit' | 'plus',
+            onSelect: () => setFeedbackOpen(true),
+        }] : []),
+        {
+            id: 'archive',
+            label: lead.archived ? 'Restore' : 'Archive',
+            icon: 'archive',
+            separator: true,
+            onSelect: () => setConfirmArchive(true),
+        },
+        ...(user?.role === 'admin' ? [{
+            id: 'delete',
+            label: 'Delete',
+            icon: 'trash' as const,
+            danger: true,
+            onSelect: () => setConfirmDelete(true),
+        }] : []),
+    ];
+
     return (
         <div className="ws-module">
             <div className="ws-module-inner">
@@ -218,9 +248,17 @@ export const LeadDetail: React.FC<LeadDetailProps> = ({ workspaceId, leadId, nav
                         </div>
                     </div>
                     <div className="ws-detail-actions">
-                        <Button icon="edit" onClick={() => setEditing(true)}>Edit</Button>
-                        <Button icon="archive" onClick={() => setConfirmArchive(true)}>{lead.archived ? 'Restore' : 'Archive'}</Button>
-                        {user?.role === 'admin' && <Button variant="danger" icon="trash" onClick={() => setConfirmDelete(true)}>Delete</Button>}
+                        {isLearner && (
+                            <Button variant="primary" icon="plus" onClick={() => void logAttempt()} loading={busy}>
+                                Log attempt
+                            </Button>
+                        )}
+                        {isLearner && !feedback && (
+                            <Button icon="send" onClick={() => void requestFeedback()} loading={busy}>
+                                Request feedback
+                            </Button>
+                        )}
+                        <OverflowMenu label="More actions" items={detailMenuItems} />
                     </div>
                 </header>
 
@@ -269,10 +307,6 @@ export const LeadDetail: React.FC<LeadDetailProps> = ({ workspaceId, leadId, nav
                                         {lead.tracksExplored.map(track => <Badge key={track} tone="blue">{track}</Badge>)}
                                     </div>
                                 )}
-                                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                    <Button icon="plus" variant="primary" onClick={() => void logAttempt()} loading={busy}>Log challenge attempt</Button>
-                                    <Button variant="ghost" icon="edit" onClick={() => setEditing(true)}>Edit profile</Button>
-                                </div>
                                 {lead.dropOffReason && (
                                     <div className="ws-feedback-note">
                                         <div className="ws-subheading">Drop-off / pause reason</div>
@@ -286,23 +320,15 @@ export const LeadDetail: React.FC<LeadDetailProps> = ({ workspaceId, leadId, nav
                             <SectionCard
                                 title="Learner feedback"
                                 description={feedback ? `Recorded ${formatDate(feedback.submittedAt)} · FDE help ${feedback.fdeHelpRating}/5` : 'Capture why they started, where they got stuck and whether ALGO helps FDE preparation.'}
-                                action={(
-                                    <div style={{ display: 'flex', gap: 6 }}>
-                                        {!feedback && lead.feedbackStatus !== 'requested' && (
-                                            <Button size="sm" variant="ghost" icon="send" onClick={() => void requestFeedback()} loading={busy}>Request</Button>
-                                        )}
-                                        <Button size="sm" variant={feedback ? 'secondary' : 'primary'} icon={feedback ? 'edit' : 'plus'} onClick={() => setFeedbackOpen(true)}>
-                                            {feedback ? 'Edit feedback' : 'Record feedback'}
-                                        </Button>
-                                    </div>
-                                )}
                             >
                                 {!feedback ? (
                                     <EmptyState
                                         compact
                                         icon="message"
                                         title={lead.feedbackStatus === 'requested' ? 'Feedback requested' : 'No structured feedback yet'}
-                                        description={lead.feedbackStatus === 'requested' ? 'The learner has been asked. Record their answers here when they reply.' : 'A feedback conversation is the success signal for the first cohort.'}
+                                        description={lead.feedbackStatus === 'requested'
+                                            ? 'The learner has been asked. Record their answers from the More menu when they reply.'
+                                            : 'Request feedback from the header, then record the answers from the More menu.'}
                                     />
                                 ) : (
                                     <div className="ws-feedback-detail">
@@ -328,27 +354,30 @@ export const LeadDetail: React.FC<LeadDetailProps> = ({ workspaceId, leadId, nav
                         )}
 
                         <SectionCard title="Log activity" description="Calls, emails, meetings and follow-ups are added to the timeline.">
-                            <form onSubmit={logActivity}>
-                                <div className="ws-form-grid">
-                                    <Field label="Type" htmlFor="activity-type">
-                                        <Select id="activity-type" value={activityType} onChange={e => setActivityType(e.target.value as LeadActivityType)}>
-                                            {ACTIVITY_TYPES.map(type => <option key={type.id} value={type.id}>{type.label}</option>)}
-                                        </Select>
-                                    </Field>
-                                    <Field label="When" htmlFor="activity-at">
-                                        <TextInput id="activity-at" type="datetime-local" value={activityAt} onChange={e => setActivityAt(e.target.value)} />
-                                    </Field>
-                                    <Field label="Subject" htmlFor="activity-subject" required className="span-2">
-                                        <TextInput id="activity-subject" value={activitySubject} onChange={e => setActivitySubject(e.target.value)} placeholder="e.g. Discovery call — budget and timeline" />
-                                    </Field>
-                                    <Field label="Notes" htmlFor="activity-body" className="span-2">
-                                        <TextArea id="activity-body" value={activityBody} onChange={e => setActivityBody(e.target.value)} placeholder="What happened? What's next?" />
-                                    </Field>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
-                                    <Button type="submit" variant="primary" icon="plus" loading={busy} disabled={!activitySubject.trim()}>Log activity</Button>
-                                </div>
-                            </form>
+                            <details className="ws-disclosure">
+                                <summary>Log a call, email or note</summary>
+                                <form onSubmit={logActivity}>
+                                    <div className="ws-form-grid">
+                                        <Field label="Type" htmlFor="activity-type">
+                                            <Select id="activity-type" value={activityType} onChange={e => setActivityType(e.target.value as LeadActivityType)}>
+                                                {ACTIVITY_TYPES.map(type => <option key={type.id} value={type.id}>{type.label}</option>)}
+                                            </Select>
+                                        </Field>
+                                        <Field label="When" htmlFor="activity-at">
+                                            <TextInput id="activity-at" type="datetime-local" value={activityAt} onChange={e => setActivityAt(e.target.value)} />
+                                        </Field>
+                                        <Field label="Subject" htmlFor="activity-subject" required className="span-2">
+                                            <TextInput id="activity-subject" value={activitySubject} onChange={e => setActivitySubject(e.target.value)} placeholder="e.g. Discovery call — budget and timeline" />
+                                        </Field>
+                                        <Field label="Notes" htmlFor="activity-body" className="span-2">
+                                            <TextArea id="activity-body" value={activityBody} onChange={e => setActivityBody(e.target.value)} placeholder="What happened? What's next?" />
+                                        </Field>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+                                        <Button type="submit" variant="primary" icon="plus" loading={busy} disabled={!activitySubject.trim()}>Log activity</Button>
+                                    </div>
+                                </form>
+                            </details>
                         </SectionCard>
 
                         <SectionCard title="Activity timeline" description={`${data.activities.length} recorded interaction${data.activities.length === 1 ? '' : 's'}`}>

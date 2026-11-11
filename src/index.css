@@ -30,22 +30,22 @@
   /* Text - High Contrast */
   --text-primary: #000000;
   --text-secondary: #666666;
-  --text-tertiary: #999999;
+  --text-tertiary: #6b6b70;
 
   /* Accents - User Palette */
   /* Accents - User Palette */
-  --accent-primary: #0071e3;
+  --accent-primary: #0066cc;
   /* Blue */
-  --accent-success: #0071e3;
+  --accent-success: #0066cc;
   /* Blue (Replaced Lime) */
   --accent-warning: #ff3b30;
   /* Red (Substituting Yellow) */
   --accent-danger: #ff3b30;
   /* Red */
 
-  --color-green: #0071e3;
+  --color-green: #0066cc;
   /* Direct reference */
-  --color-blue: #0071e3;
+  --color-blue: #0066cc;
   --color-red: #ff3b30;
   --color-black: #000000;
   --color-white: #ffffff;
@@ -78,8 +78,8 @@
     --surface-mid: #eef0f2;
     --surface-high: #e5e5ea;
     --text-primary: #1d1d1f;
-    --text-secondary: #86868b;
-    --text-tertiary: #a1a1a6;
+    --text-secondary: #666666;
+    --text-tertiary: #6b6b70;
     --border-subtle: rgba(0, 0, 0, 0.08);
   }
 }

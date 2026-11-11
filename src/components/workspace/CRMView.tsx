@@ -18,9 +18,10 @@ import { PRIORITIES, PRIORITY_LABEL } from '../../services/validation';
 import type { WorkspaceNav } from '../../types/workspace';
 import { Avatar, Badge, Button, ConfirmDialog, EmptyState, IconButton, PageHeader, SearchInput } from '../ui/Misc';
 import { Icon } from '../ui/Icon';
+import { OverflowMenu } from '../ui/OverflowMenu';
 import { Select } from '../ui/Form';
 import { useToast } from '../ui/Toast';
-import { DataState, PRIORITY_COLOR, PriorityDot, formatMoney, readStoredView } from './shared';
+import { DataState, PRIORITY_COLOR, PriorityDot, formatMoney } from './shared';
 import { useAsyncData } from './useAsyncData';
 import { LeadForm } from './LeadForm';
 import { LeadDetail } from './LeadDetail';
@@ -42,7 +43,7 @@ const PAGE_SIZE = 12;
 export const CRMView: React.FC<CRMViewProps> = ({ workspaceId, userId, selectedLeadId, onCloseLead, nav }) => {
     const { user, members } = useAuth();
     const toast = useToast();
-    const [view, setView] = useState<ViewMode>(() => readStoredView('ninai_crm_view', ['kanban', 'table'], 'kanban'));
+    const [view, setView] = useState<ViewMode>('table');
     const [audience, setAudience] = useState<LeadAudience>(() => (
         localStorage.getItem('ninai_crm_audience') === 'institution' ? 'institution' : 'learner'
     ));
@@ -53,6 +54,8 @@ export const CRMView: React.FC<CRMViewProps> = ({ workspaceId, userId, selectedL
     const [sourceFilter, setSourceFilter] = useState('all');
     const [qualityFilter, setQualityFilter] = useState<'all' | LeadQuality | 'unassessed'>('all');
     const [showArchived, setShowArchived] = useState(false);
+    const [filtersOpen, setFiltersOpen] = useState(false);
+    const [selectionMode, setSelectionMode] = useState(false);
     const [sortKey, setSortKey] = useState<SortKey>('updated');
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
     const [page, setPage] = useState(1);
@@ -87,6 +90,10 @@ export const CRMView: React.FC<CRMViewProps> = ({ workspaceId, userId, selectedL
     const changeView = (next: ViewMode) => {
         setView(next);
         localStorage.setItem('ninai_crm_view', next);
+        if (next === 'kanban') {
+            setSelectionMode(false);
+            setSelected(new Set());
+        }
     };
 
     const changeAudience = (next: LeadAudience) => {
@@ -97,6 +104,34 @@ export const CRMView: React.FC<CRMViewProps> = ({ workspaceId, userId, selectedL
         setQualityFilter('all');
         setPage(1);
         setSelected(new Set());
+        setSelectionMode(false);
+    };
+
+    const activeFilterCount = [
+        stageFilter !== 'all',
+        ownerFilter !== 'all',
+        priorityFilter !== 'all',
+        sourceFilter !== 'all',
+        qualityFilter !== 'all',
+        showArchived,
+    ].filter(Boolean).length;
+
+    const clearFilters = () => {
+        setStageFilter('all');
+        setOwnerFilter('all');
+        setPriorityFilter('all');
+        setSourceFilter('all');
+        setQualityFilter('all');
+        setShowArchived(false);
+        setPage(1);
+        setSelected(new Set());
+    };
+
+    const toggleSelectionMode = () => {
+        setSelectionMode(value => {
+            if (value) setSelected(new Set());
+            return !value;
+        });
     };
 
     const filtered = useMemo(() => {
@@ -184,6 +219,33 @@ export const CRMView: React.FC<CRMViewProps> = ({ workspaceId, userId, selectedL
         }
     };
 
+    const overflowItems = [
+        {
+            id: 'import',
+            label: 'Import CSV',
+            icon: 'upload' as const,
+            onSelect: () => setImportOpen(true),
+        },
+        {
+            id: 'export',
+            label: selected.size ? `Export ${selected.size} selected` : 'Export CSV',
+            icon: 'download' as const,
+            onSelect: () => void exportCsv(Array.from(selected)),
+        },
+        {
+            id: 'view',
+            label: view === 'table' ? 'Switch to board view' : 'Switch to table view',
+            icon: (view === 'table' ? 'kanban' : 'table') as 'kanban' | 'table',
+            onSelect: () => changeView(view === 'table' ? 'kanban' : 'table'),
+        },
+        {
+            id: 'select',
+            label: selectionMode ? 'Done selecting' : 'Select records',
+            icon: 'check' as const,
+            onSelect: toggleSelectionMode,
+        },
+    ];
+
     const dropOnStage = async (stageId: string) => {
         if (!draggingId) return;
         const lead = leads.find(item => item.id === draggingId);
@@ -213,9 +275,13 @@ export const CRMView: React.FC<CRMViewProps> = ({ workspaceId, userId, selectedL
                         : `${audienceLeads.length} institution${audienceLeads.length === 1 ? '' : 's'} · discovery and pilots only; there is no confirmed offer yet.`}
                     actions={(
                         <>
-                            <Button icon="upload" onClick={() => setImportOpen(true)}>Import</Button>
-                            <Button icon="download" onClick={() => void exportCsv(Array.from(selected))}>{selected.size ? `Export ${selected.size}` : 'Export'}</Button>
-                            <Button variant="primary" icon="plus" onClick={() => { setEditing(null); setFormOpen(true); }}>{isLearner ? 'New learner' : 'New institution'}</Button>
+                            <IconButton
+                                icon="plus"
+                                label={isLearner ? 'Add learner' : 'Add institution'}
+                                className="ws-add-primary"
+                                onClick={() => { setEditing(null); setFormOpen(true); }}
+                            />
+                            <OverflowMenu label={isLearner ? 'Learner actions' : 'Institution actions'} items={overflowItems} />
                         </>
                     )}
                 />
@@ -229,45 +295,59 @@ export const CRMView: React.FC<CRMViewProps> = ({ workspaceId, userId, selectedL
                     </button>
                 </div>
 
-                <div className="ws-toolbar" style={{ marginBottom: 14 }}>
+                <div className="ws-toolbar ws-toolbar-learner">
                     <SearchInput value={search} onChange={value => { setSearch(value); setPage(1); }} placeholder={isLearner ? 'Search learners, source, notes…' : 'Search institutions, contacts, notes…'} className="ws-search-wide" />
-                    <Select value={stageFilter} onChange={e => { setStageFilter(e.target.value); setPage(1); }} aria-label="Filter by stage">
-                        <option value="all">All stages</option>
-                        {audienceStages.map(stage => <option key={stage.id} value={stage.id}>{stage.name}</option>)}
-                    </Select>
-                    <Select value={ownerFilter} onChange={e => { setOwnerFilter(e.target.value); setPage(1); }} aria-label="Filter by owner">
-                        <option value="all">All owners</option>
-                        {members.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}
-                    </Select>
-                    <Select value={priorityFilter} onChange={e => { setPriorityFilter(e.target.value as 'all' | Priority); setPage(1); }} aria-label="Filter by priority">
-                        <option value="all">All priorities</option>
-                        {PRIORITIES.map(priority => <option key={priority} value={priority}>{PRIORITY_LABEL[priority]}</option>)}
-                    </Select>
-                    <Select value={sourceFilter} onChange={e => { setSourceFilter(e.target.value); setPage(1); }} aria-label="Filter by source">
-                        <option value="all">All sources</option>
-                        <option value="unknown">No source</option>
-                        {LEAD_SOURCES.map(source => <option key={source.id} value={source.id}>{source.label}</option>)}
-                    </Select>
-                    {isLearner && (
-                        <Select value={qualityFilter} onChange={e => { setQualityFilter(e.target.value as 'all' | LeadQuality | 'unassessed'); setPage(1); }} aria-label="Filter by lead quality">
-                            <option value="all">All quality</option>
-                            {LEAD_QUALITIES.map(quality => <option key={quality.id} value={quality.id}>{quality.label}</option>)}
-                            <option value="unassessed">Not assessed</option>
-                        </Select>
-                    )}
-                    <button
-                        className={`ws-btn ws-btn-sm ${showArchived ? 'ws-btn-subtle' : 'ws-btn-ghost'}`}
-                        onClick={() => { setShowArchived(value => !value); setPage(1); setSelected(new Set()); }}
-                        title="Include archived records"
+                    <Button
+                        icon="filter"
+                        variant={filtersOpen || activeFilterCount > 0 ? 'subtle' : 'secondary'}
+                        onClick={() => setFiltersOpen(value => !value)}
+                        aria-expanded={filtersOpen}
+                        aria-controls="crm-filter-panel"
                     >
-                        <Icon name="archive" size={14} /> {showArchived ? 'Archived shown' : 'Archived'}
-                    </button>
+                        Filters{activeFilterCount > 0 ? ` · ${activeFilterCount}` : ''}
+                    </Button>
                     <span className="ws-toolbar-spacer" />
-                    <div className="ws-segmented">
-                        <button className={view === 'kanban' ? 'active' : ''} onClick={() => changeView('kanban')} title="Kanban"><Icon name="kanban" size={14} /></button>
-                        <button className={view === 'table' ? 'active' : ''} onClick={() => changeView('table')} title="Table"><Icon name="table" size={14} /></button>
-                    </div>
                 </div>
+
+                {filtersOpen && (
+                    <div className="ws-filter-panel" id="crm-filter-panel">
+                        <div className="ws-filter-grid">
+                            <Select value={stageFilter} onChange={e => { setStageFilter(e.target.value); setPage(1); }} aria-label="Filter by stage">
+                                <option value="all">All stages</option>
+                                {audienceStages.map(stage => <option key={stage.id} value={stage.id}>{stage.name}</option>)}
+                            </Select>
+                            <Select value={ownerFilter} onChange={e => { setOwnerFilter(e.target.value); setPage(1); }} aria-label="Filter by owner">
+                                <option value="all">All owners</option>
+                                {members.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}
+                            </Select>
+                            <Select value={priorityFilter} onChange={e => { setPriorityFilter(e.target.value as 'all' | Priority); setPage(1); }} aria-label="Filter by priority">
+                                <option value="all">All priorities</option>
+                                {PRIORITIES.map(priority => <option key={priority} value={priority}>{PRIORITY_LABEL[priority]}</option>)}
+                            </Select>
+                            <Select value={sourceFilter} onChange={e => { setSourceFilter(e.target.value); setPage(1); }} aria-label="Filter by source">
+                                <option value="all">All sources</option>
+                                <option value="unknown">No source</option>
+                                {LEAD_SOURCES.map(source => <option key={source.id} value={source.id}>{source.label}</option>)}
+                            </Select>
+                            {isLearner && (
+                                <Select value={qualityFilter} onChange={e => { setQualityFilter(e.target.value as 'all' | LeadQuality | 'unassessed'); setPage(1); }} aria-label="Filter by lead quality">
+                                    <option value="all">All quality</option>
+                                    {LEAD_QUALITIES.map(quality => <option key={quality.id} value={quality.id}>{quality.label}</option>)}
+                                    <option value="unassessed">Not assessed</option>
+                                </Select>
+                            )}
+                            <button
+                                type="button"
+                                className={`ws-filter-archive ${showArchived ? 'active' : ''}`}
+                                onClick={() => { setShowArchived(value => !value); setPage(1); setSelected(new Set()); }}
+                                aria-pressed={showArchived}
+                            >
+                                <Icon name="archive" size={15} /> Include archived
+                            </button>
+                            <Button variant="ghost" onClick={clearFilters} disabled={activeFilterCount === 0}>Clear filters</Button>
+                        </div>
+                    </div>
+                )}
 
                 {selected.size > 0 && (
                     <div className="ws-bulk-bar">
@@ -291,9 +371,8 @@ export const CRMView: React.FC<CRMViewProps> = ({ workspaceId, userId, selectedL
                         icon="crm"
                         title={audienceLeads.length === 0 ? (isLearner ? 'No learners yet' : 'No institutions yet') : 'No records match these filters'}
                         description={audienceLeads.length === 0
-                            ? (isLearner ? 'Add a learner from a source or import a CSV to start tracking activation and feedback.' : 'Add a college or training institute to start discovery. No offer is promised yet.')
+                            ? (isLearner ? 'Use the + button above to add your first learner, or bring in a CSV from the actions menu.' : 'Use the + button above to add a college or training institute. No offer is promised yet.')
                             : 'Try clearing the search or filters.'}
-                        action={<Button variant="primary" icon="plus" onClick={() => { setEditing(null); setFormOpen(true); }}>{isLearner ? 'New learner' : 'New institution'}</Button>}
                     />
                 )}
 
@@ -325,9 +404,18 @@ export const CRMView: React.FC<CRMViewProps> = ({ workspaceId, userId, selectedL
                                                 key={lead.id}
                                                 className={`ws-lead-card ${draggingId === lead.id ? 'dragging' : ''}`}
                                                 draggable
+                                                tabIndex={0}
+                                                role="button"
+                                                aria-label={`Open ${lead.name}`}
                                                 onDragStart={() => setDraggingId(lead.id)}
                                                 onDragEnd={() => { setDraggingId(null); setDragOverStage(null); }}
                                                 onClick={() => nav.openLead(lead.id)}
+                                                onKeyDown={event => {
+                                                    if (event.key === 'Enter' || event.key === ' ') {
+                                                        event.preventDefault();
+                                                        nav.openLead(lead.id);
+                                                    }
+                                                }}
                                             >
                                                 <div className="ws-lead-card-top">
                                                     <div style={{ minWidth: 0 }}>
@@ -372,8 +460,13 @@ export const CRMView: React.FC<CRMViewProps> = ({ workspaceId, userId, selectedL
                         <table className="ws-table">
                             <thead>
                                 <tr>
-                                    <th className="ws-checkbox-cell"><input type="checkbox" checked={allPageSelected} onChange={toggleAllPage} aria-label="Select all on page" /></th>
-                                    <th className="sortable" onClick={() => toggleSort('name')}>{isLearner ? 'Learner' : 'Institution'} {sortKey === 'name' && (sortDir === 'asc' ? '↑' : '↓')}</th>
+                                    {selectionMode && <th className="ws-checkbox-cell"><label className="ws-check-target"><input type="checkbox" checked={allPageSelected} onChange={toggleAllPage} aria-label="Select all on page" /></label></th>}
+                                    <th className="sortable" tabIndex={0} onClick={() => toggleSort('name')} onKeyDown={event => {
+                                        if (event.key === 'Enter' || event.key === ' ') {
+                                            event.preventDefault();
+                                            toggleSort('name');
+                                        }
+                                    }}>{isLearner ? 'Learner' : 'Institution'} {sortKey === 'name' && (sortDir === 'asc' ? '↑' : '↓')}</th>
                                     {isLearner ? (
                                         <>
                                             <th>Source</th>
@@ -383,23 +476,48 @@ export const CRMView: React.FC<CRMViewProps> = ({ workspaceId, userId, selectedL
                                     ) : (
                                         <>
                                             <th>Organisation</th>
-                                            <th className="sortable" onClick={() => toggleSort('value')}>Value {sortKey === 'value' && (sortDir === 'asc' ? '↑' : '↓')}</th>
+                                            <th className="sortable" tabIndex={0} onClick={() => toggleSort('value')} onKeyDown={event => {
+                                                if (event.key === 'Enter' || event.key === ' ') {
+                                                    event.preventDefault();
+                                                    toggleSort('value');
+                                                }
+                                            }}>Value {sortKey === 'value' && (sortDir === 'asc' ? '↑' : '↓')}</th>
                                             <th>Priority</th>
                                         </>
                                     )}
                                     <th>Stage</th>
                                     <th>Owner</th>
                                     <th>Next follow-up</th>
-                                    <th className="sortable" onClick={() => toggleSort('updated')}>Updated {sortKey === 'updated' && (sortDir === 'asc' ? '↑' : '↓')}</th>
-                                    <th />
+                                    <th className="sortable" tabIndex={0} onClick={() => toggleSort('updated')} onKeyDown={event => {
+                                        if (event.key === 'Enter' || event.key === ' ') {
+                                            event.preventDefault();
+                                            toggleSort('updated');
+                                        }
+                                    }}>Updated {sortKey === 'updated' && (sortDir === 'asc' ? '↑' : '↓')}</th>
+                                    <th aria-hidden="true" />
                                 </tr>
                             </thead>
                             <tbody>
                                 {paged.map(lead => (
-                                    <tr key={lead.id} className={selected.has(lead.id) ? 'selected' : ''} onClick={() => nav.openLead(lead.id)}>
-                                        <td className="ws-checkbox-cell" onClick={event => event.stopPropagation()}>
-                                            <input type="checkbox" checked={selected.has(lead.id)} onChange={() => toggleSelect(lead.id)} aria-label={`Select ${lead.name}`} />
-                                        </td>
+                                    <tr
+                                        key={lead.id}
+                                        className={`${selected.has(lead.id) ? 'selected' : ''} ws-table-row`}
+                                        tabIndex={0}
+                                        aria-label={`Open ${lead.name}`}
+                                        onClick={() => selectionMode ? toggleSelect(lead.id) : nav.openLead(lead.id)}
+                                        onKeyDown={event => {
+                                            if (event.key === 'Enter' || event.key === ' ') {
+                                                event.preventDefault();
+                                                if (selectionMode) toggleSelect(lead.id);
+                                                else nav.openLead(lead.id);
+                                            }
+                                        }}
+                                    >
+                                        {selectionMode && (
+                                            <td className="ws-checkbox-cell" onClick={event => event.stopPropagation()}>
+                                                <label className="ws-check-target"><input type="checkbox" checked={selected.has(lead.id)} onChange={() => toggleSelect(lead.id)} aria-label={`Select ${lead.name}`} /></label>
+                                            </td>
+                                        )}
                                         <td>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                                 <Avatar name={lead.name} size={28} />
@@ -430,12 +548,7 @@ export const CRMView: React.FC<CRMViewProps> = ({ workspaceId, userId, selectedL
                                         <td>{lead.ownerName}</td>
                                         <td>{lead.nextFollowUpAt ? formatDate(lead.nextFollowUpAt) : '—'}</td>
                                         <td>{formatDate(lead.updatedAt)}</td>
-                                        <td onClick={event => event.stopPropagation()}>
-                                            <div className="cell-actions">
-                                                <IconButton icon="edit" label="Edit lead" onClick={() => { setEditing(lead); setFormOpen(true); }} />
-                                                <IconButton icon="chevron-right" label="Open lead" onClick={() => nav.openLead(lead.id)} />
-                                            </div>
-                                        </td>
+                                        <td className="ws-row-chevron" aria-hidden="true"><Icon name="chevron-right" size={15} /></td>
                                     </tr>
                                 ))}
                             </tbody>

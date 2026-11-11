@@ -264,3 +264,199 @@
 .close-link:hover {
     color: var(--text-primary);
 }
+
+/* Simplified primary navigation -------------------------------------------- */
+
+.sidebar-nav {
+    gap: 14px;
+    overflow: visible;
+}
+
+.sidebar-profile {
+    position: relative;
+    flex: 0 0 auto;
+}
+
+.sidebar-logo {
+    width: 44px;
+    height: 44px;
+    border: 0;
+    padding: 0;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    -webkit-app-region: no-drag;
+}
+
+.sidebar-scroll {
+    overflow: visible;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.sidebar-modules {
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.nav-module-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+}
+
+.sidebar-more-wrap {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.sidebar-more-panel {
+    position: fixed;
+    left: 60px;
+    top: 72px;
+    width: 252px;
+    max-height: calc(100vh - 96px);
+    overflow-y: auto;
+    padding: 8px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 14px;
+    background: var(--surface-low);
+    box-shadow: var(--shadow-lg);
+    z-index: 10000;
+    -webkit-app-region: no-drag;
+}
+
+.sidebar-more-label {
+    padding: 10px 10px 4px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+}
+
+.sidebar-more-item {
+    width: 100%;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: var(--font-sans);
+    font-size: 12.5px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+}
+
+.sidebar-more-item:hover,
+.sidebar-more-item:focus-visible {
+    background: var(--surface-mid);
+    color: var(--text-primary);
+}
+
+.sidebar-more-item.active {
+    background: rgba(0, 113, 227, 0.08);
+    color: var(--accent-primary);
+}
+
+.sidebar-more-item > span:not(.sidebar-more-site):not(.sidebar-more-kbd) {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sidebar-more-kbd {
+    margin-left: auto;
+    font-family: var(--font-sans);
+    font-size: 10px;
+    color: var(--text-tertiary);
+    background: var(--surface-mid);
+    border: 1px solid var(--border-subtle);
+    border-radius: 5px;
+    padding: 2px 5px;
+}
+
+.sidebar-more-site {
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    border-radius: 7px;
+    background: var(--surface-mid);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.sidebar-more-form {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    padding: 8px 8px 4px;
+}
+
+.sidebar-more-form input {
+    width: 100%;
+    min-height: 44px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 9px;
+    background: var(--surface-low);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    padding: 0 10px;
+}
+
+.sidebar-more-form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+}
+
+.sidebar-more-form-actions button {
+    min-height: 44px;
+    padding: 0 12px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 9px;
+    background: var(--surface-low);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.sidebar-more-form-actions button.primary {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: #fff;
+}
+
+.sidebar-more-form-actions button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.sidebar-more-form-actions button:focus-visible,
+.sidebar-logo:focus-visible,
+.nav-module-btn:focus-visible,
+.close-link:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+}
+
+.profile-menu button,
+.profile-menu input {
+    min-height: 44px;
+}

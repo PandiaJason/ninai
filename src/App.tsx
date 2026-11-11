@@ -8,6 +8,7 @@ import { TOOLS } from './data/tools';
 import { Onboarding } from './components/Onboarding';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { useAuth } from './context/AuthContext';
+import { TodayView } from './components/workspace/TodayView';
 import { DashboardView } from './components/workspace/DashboardView';
 import { CRMView } from './components/workspace/CRMView';
 import { AnalyticsView } from './components/workspace/AnalyticsView';
@@ -19,11 +20,13 @@ import { SettingsView } from './components/workspace/SettingsView';
 import { GlobalSearch } from './components/workspace/GlobalSearch';
 import type { ModuleId, WorkspaceNav } from './types/workspace';
 
-const MODULE_IDS: ModuleId[] = ['dashboard', 'crm', 'analytics', 'projects', 'followups', 'tasks', 'notes', 'calendar', 'settings', 'tools'];
+const MODULE_IDS: ModuleId[] = ['today', 'dashboard', 'crm', 'analytics', 'projects', 'followups', 'tasks', 'notes', 'calendar', 'settings', 'tools'];
 
 function readModule(): ModuleId {
     const saved = localStorage.getItem('ninai_active_module') as ModuleId | null;
-    return saved && MODULE_IDS.includes(saved) ? saved : 'dashboard';
+    // Existing installs land on the old overview; Today is the new home.
+    if (saved === 'dashboard') return 'today';
+    return saved && MODULE_IDS.includes(saved) ? saved : 'today';
 }
 
 // --- Tools State ---
@@ -148,7 +151,7 @@ function App() {
             setSelectedProjectId(null);
             setSelectedTaskId(null);
             setExternalNoteId(null);
-            setActiveModule(module => (module === 'tools' ? module : 'dashboard'));
+            setActiveModule(module => (module === 'tools' ? module : 'today'));
         }
         prevWorkspaceId.current = workspace?.id;
     }, [workspace?.id]);
@@ -230,6 +233,8 @@ function App() {
 
     const renderModule = () => {
         switch (activeModule) {
+            case 'today':
+                return <TodayView workspaceId={workspace.id} userId={user.id} userName={user.name} nav={nav} />;
             case 'dashboard':
                 return <DashboardView workspaceId={workspace.id} userId={user.id} userName={user.name} nav={nav} />;
             case 'crm':

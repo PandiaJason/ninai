@@ -1,4 +1,5 @@
 export type ModuleId =
+    | 'today'
     | 'dashboard'
     | 'crm'
     | 'analytics'
