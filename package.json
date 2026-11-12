@@ -9,6 +9,8 @@
   "description": "The New Interface for AI. Ninai is a local-first productivity application.",
   "scripts": {
     "server": "node server/index.js",
+    "migrate": "node scripts/migrate.js --dry-run",
+    "migrate:apply": "node scripts/migrate.js --apply",
     "dev": "vite",
     "desktop": "concurrently \"npm run dev\" \"wait-on tcp:5173 && cross-env ELECTRON_RENDERER_URL=http://localhost:5173 electron .\"",
     "start:all": "concurrently \"npm run server\" \"npm run dev\"",

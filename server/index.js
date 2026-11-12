@@ -6,6 +6,7 @@ import authRoutes from './routes/auth.js';
 import leadsRoutes from './routes/leads.js';
 import notesRoutes from './routes/notes.js';
 import messagesRoutes from './routes/messages.js';
+import migrateRoutes from './routes/migrate.js';
 
 dotenv.config();
 
@@ -41,6 +42,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/leads', leadsRoutes);
 app.use('/api', notesRoutes);
 app.use('/api/messages', messagesRoutes);
+app.use('/api/migrate', migrateRoutes);
 
 // 404 Route
 app.use((req, res) => {
