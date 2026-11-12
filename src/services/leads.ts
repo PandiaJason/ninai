@@ -11,6 +11,7 @@ import {
     type Priority,
     type Tag,
 } from '../db';
+import { apiRequest, mapDbLeadToModel, stageToStatus } from './api';
 import { requireUser, type SessionUser } from './auth';
 import {
     LEAD_QUALITY_LABEL,
@@ -92,7 +93,15 @@ export async function listLeads(workspaceId: string, includeArchived = false, au
     const user = await requireUser();
     await assertWorkspaceAccess(user, workspaceId);
 
-    const leads = await db.leads.where('workspaceId').equals(workspaceId).toArray();
+    let leads: Lead[];
+    try {
+        const rows = await apiRequest<any[]>(`/leads?include_archived=${includeArchived ? 'true' : 'false'}`);
+        leads = rows.map(r => mapDbLeadToModel(r, workspaceId));
+        await db.leads.bulkPut(leads);
+    } catch {
+        leads = await db.leads.where('workspaceId').equals(workspaceId).toArray();
+    }
+
     const filtered = (includeArchived ? leads : leads.filter(l => !l.archived))
         .filter(lead => !audience || (lead.audience || 'learner') === audience);
     const stages = await db.leadStages.where('workspaceId').equals(workspaceId).toArray();
@@ -116,11 +125,17 @@ export async function listLeads(workspaceId: string, includeArchived = false, au
 }
 
 export async function getLead(leadId: string): Promise<Lead> {
-    const user = await requireUser();
-    const lead = await db.leads.get(leadId);
-    if (!lead) throw new AppError('NOT_FOUND', 'Lead not found.');
-    await assertWorkspaceAccess(user, lead.workspaceId);
-    return lead;
+    await requireUser();
+    try {
+        const row = await apiRequest<any>(`/leads/${leadId}`);
+        const lead = mapDbLeadToModel(row);
+        await db.leads.put(lead);
+        return lead;
+    } catch {
+        const lead = await db.leads.get(leadId);
+        if (!lead) throw new AppError('NOT_FOUND', 'Lead not found.');
+        return lead;
+    }
 }
 
 function optionalEnum<T extends string>(value: string | undefined, allowed: readonly T[], label: string): T | undefined {
@@ -234,12 +249,46 @@ export async function createLead(workspaceId: string, input: LeadInput): Promise
     await assertWorkspaceAccess(actor, workspaceId);
     const normalized = await normalizeLead(actor, workspaceId, input);
 
-    const lead: Lead = {
+    const leadId = crypto.randomUUID();
+    let lead: Lead = {
         ...normalized,
-        id: crypto.randomUUID(),
+        id: leadId,
         createdAt: Date.now(),
         createdBy: actor.id,
     };
+
+    try {
+        const createdRow = await apiRequest<any>('/leads', {
+            method: 'POST',
+            body: JSON.stringify({
+                id: lead.id,
+                name: lead.name,
+                contact: lead.email || lead.phone || lead.company || '',
+                company: lead.company,
+                email: lead.email,
+                phone: lead.phone,
+                source: lead.source,
+                status: stageToStatus(lead.stageId),
+                priority: lead.priority,
+                value: lead.value,
+                description: lead.description,
+                audience: lead.audience,
+                persona: lead.persona,
+                quality: lead.quality,
+                challenge_attempts: lead.challengeAttempts,
+                tracks_explored: lead.tracksExplored,
+                feedback_status: lead.feedbackStatus,
+                drop_off_reason: lead.dropOffReason,
+                institution_type: lead.institutionType,
+                student_count: lead.studentCount,
+                owner_id: actor.id,
+            }),
+        });
+        lead = mapDbLeadToModel(createdRow, workspaceId);
+    } catch (err: any) {
+        if (err.code === 'AUTH') throw err;
+        console.warn('Backend create lead fallback to local:', err.message);
+    }
 
     await db.leads.add(lead);
     if (input.tags?.length) await setTagsForEntity(workspaceId, 'lead', lead.id, input.tags);
@@ -262,7 +311,40 @@ export async function updateLead(leadId: string, input: Partial<LeadInput>): Pro
     await assertLeadEdit(actor, existing);
 
     const normalized = await normalizeLead(actor, existing.workspaceId, input, existing);
-    const updated: Lead = { ...existing, ...normalized, id: existing.id, createdAt: existing.createdAt, createdBy: existing.createdBy };
+    let updated: Lead = { ...existing, ...normalized, id: existing.id, createdAt: existing.createdAt, createdBy: existing.createdBy };
+
+    try {
+        const updatedRow = await apiRequest<any>(`/leads/${leadId}`, {
+            method: 'PUT',
+            body: JSON.stringify({
+                name: updated.name,
+                contact: updated.email || updated.phone || updated.company || '',
+                company: updated.company,
+                email: updated.email,
+                phone: updated.phone,
+                source: updated.source,
+                status: stageToStatus(updated.stageId),
+                priority: updated.priority,
+                value: updated.value,
+                description: updated.description,
+                audience: updated.audience,
+                persona: updated.persona,
+                quality: updated.quality,
+                challenge_attempts: updated.challengeAttempts,
+                tracks_explored: updated.tracksExplored,
+                feedback_status: updated.feedbackStatus,
+                drop_off_reason: updated.dropOffReason,
+                institution_type: updated.institutionType,
+                student_count: updated.studentCount,
+                archived: updated.archived === 1,
+            }),
+        });
+        updated = mapDbLeadToModel(updatedRow, existing.workspaceId);
+    } catch (err: any) {
+        if (err.code === 'AUTH') throw err;
+        console.warn('Backend update lead fallback to local:', err.message);
+    }
+
     await db.leads.put(updated);
 
     if (input.tags !== undefined) {
@@ -317,6 +399,16 @@ export async function moveLeadStage(leadId: string, stageId: string): Promise<vo
     }
     if (stageAudience(stage) !== (lead.audience || 'learner')) {
         throw new AppError('VALIDATION', 'Move this record inside its own pipeline.');
+    }
+
+    try {
+        await apiRequest(`/leads/${leadId}`, {
+            method: 'PUT',
+            body: JSON.stringify({ status: stageToStatus(stageId), archived: false }),
+        });
+    } catch (err: any) {
+        if (err.code === 'AUTH') throw err;
+        console.warn('Backend move lead stage fallback to local:', err.message);
     }
 
     await db.leads.update(leadId, {
@@ -379,6 +471,17 @@ export async function addLeadActivity(leadId: string, input: {
     const body = optional(input.body, 'Activity notes', 4000) || '';
     const occurredAt = input.occurredAt || Date.now();
     const now = Date.now();
+
+    if (type === 'note') {
+        try {
+            await apiRequest(`/leads/${leadId}/notes`, {
+                method: 'POST',
+                body: JSON.stringify({ body: body ? `${subject}\n${body}` : subject }),
+            });
+        } catch (e: any) {
+            console.warn('Backend add note fallback:', e.message);
+        }
+    }
 
     const activity: LeadActivity = {
         id: crypto.randomUUID(),
@@ -517,6 +620,29 @@ export async function listLeadActivities(leadId: string): Promise<LeadActivity[]
     const lead = await db.leads.get(leadId);
     if (!lead) throw new AppError('NOT_FOUND', 'Lead not found.');
     await assertWorkspaceAccess(actor, lead.workspaceId);
+
+    try {
+        const notes = await apiRequest<any[]>(`/leads/${leadId}/notes`);
+        if (notes && notes.length > 0) {
+            for (const n of notes) {
+                const noteActivity: LeadActivity = {
+                    id: n.id,
+                    workspaceId: lead.workspaceId,
+                    leadId: n.lead_id,
+                    type: 'note',
+                    subject: 'Note',
+                    body: n.body,
+                    occurredAt: new Date(n.created_at).getTime(),
+                    createdAt: new Date(n.created_at).getTime(),
+                    userId: n.author_id,
+                };
+                await db.leadActivities.put(noteActivity);
+            }
+        }
+    } catch {
+        // Fallback to local Dexie activities
+    }
+
     return db.leadActivities.where('leadId').equals(leadId).reverse().sortBy('occurredAt');
 }
 
@@ -526,6 +652,16 @@ export async function archiveLead(leadId: string, archived: boolean): Promise<vo
     if (!lead) throw new AppError('NOT_FOUND', 'Lead not found.');
     await assertWorkspaceAccess(actor, lead.workspaceId);
     await assertLeadEdit(actor, lead);
+
+    try {
+        await apiRequest(`/leads/${leadId}`, {
+            method: 'PUT',
+            body: JSON.stringify({ archived }),
+        });
+    } catch (e: any) {
+        if (e.code === 'AUTH') throw e;
+        console.warn('Backend archive lead fallback:', e.message);
+    }
 
     await db.leads.update(leadId, { archived: archived ? 1 : 0, updatedAt: Date.now() });
     await logActivity({
@@ -544,6 +680,13 @@ export async function deleteLead(leadId: string): Promise<void> {
     if (!lead) throw new AppError('NOT_FOUND', 'Lead not found.');
     await assertWorkspaceAccess(actor, lead.workspaceId);
     if (actor.role !== 'admin') throw new AppError('FORBIDDEN', 'Only admins can delete leads.');
+
+    try {
+        await apiRequest(`/leads/${leadId}`, { method: 'DELETE' });
+    } catch (e: any) {
+        if (e.code === 'AUTH') throw e;
+        console.warn('Backend delete lead fallback:', e.message);
+    }
 
     await db.transaction('rw', [
         db.leads, db.leadActivities, db.projectLeads, db.tasks, db.calendarEvents,
