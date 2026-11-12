@@ -20,6 +20,69 @@
 
 ---
 
+## Cloud PostgreSQL Backend (ALGO CRM)
+
+Ninai connects to an AWS RDS PostgreSQL database via a lightweight local Express backend API, replacing local-only storage for users, leads, lead notes, and founder communication.
+
+### 1. Database Setup in DBeaver (Run as `algo_cmo`)
+
+1. Open DBeaver and connect as `algo_cmo`.
+2. Run [create_role.sql](create_role.sql) to provision the restricted `ninai_app` application role with permissions granted on `users`, `leads`, `lead_notes`, and `messages`.
+3. *(Optional)* Run [schema_changes.sql](schema_changes.sql) if you wish to add dedicated typed columns for extended CRM fields (`company`, `priority`, `value`, `archived`, etc.).
+
+### 2. Environment Variables (`.env`)
+
+Copy `.env.example` to `.env` and fill in the values:
+```bash
+cp .env.example .env
+```
+
+| Variable | Description |
+|---|---|
+| `DB_HOST` | RDS endpoint: `ninai.cv2qy2qo683f.ap-south-1.rds.amazonaws.com` |
+| `DB_PORT` | `5432` |
+| `DB_NAME` | `ninai` |
+| `DB_USER` | `ninai_app` (never use `algo_cmo`) |
+| `DB_PASSWORD` | Password created for `ninai_app` in `create_role.sql` |
+| `JWT_SECRET` | Strong random secret string for signing session tokens |
+| `PORT` | `3001` (backend port) |
+
+### 3. How to Run Locally
+
+```bash
+# 1. Start the backend API server (port 3001)
+npm run server
+
+# 2. Start the Vite dev frontend (port 5173, proxied to API)
+npm run dev
+
+# Or run both simultaneously:
+npm run start:all
+
+# Or run desktop Electron app:
+npm run desktop
+```
+
+### 4. Data Migration
+
+To import existing local records into the cloud PostgreSQL database:
+```bash
+# Dry-run check (safe, 0 database writes):
+npm run migrate -- --file path/to/leads.json
+
+# Execute idempotent migration:
+npm run migrate:apply -- --file path/to/leads.json
+```
+
+### 5. What Is NOT Done Yet (Out of Scope)
+
+* **Cloud Hosting:** The Node backend API currently runs locally on your laptop on port 3001. Deployment to AWS/Render/fly.io is a separate session.
+* **CI/CD Pipelines:** Automated build and test workflows are not configured for the backend.
+* **Non-CRM Tables in Cloud:** General notebook notes (`notes`, `folders`), `projects`, `tasks`, and `calendarEvents` continue to use local Dexie storage. Only CRM (`leads`, `lead_notes`, `users`, and `messages`) are cloud-backed.
+* **AWS Infrastructure Changes:** No VPC, security group, or RDS parameter changes were made.
+
+---
+
 ## Why NINAI?
 
 Inspired by limitations in existing AI note-taking tools, developed NINAI to provide persistent note management while integrating multiple LLMs using users' own subscriptions — eliminating the need for separate API access.
