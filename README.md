@@ -20,66 +20,138 @@
 
 ---
 
-## Cloud PostgreSQL Backend (ALGO CRM)
+## ALGO CRM — Cloud PostgreSQL Backend
 
-Ninai connects to an AWS RDS PostgreSQL database via a lightweight local Express backend API, replacing local-only storage for users, leads, lead notes, and founder communication.
+Ninai includes a built-in CRM backed by AWS RDS PostgreSQL, accessed through a lightweight local Express API. Leads, notes, founder messages, and user authentication are all cloud-persisted. Local Dexie storage is used only for notes, projects, tasks, and calendar events.
 
-### 1. Database Setup in DBeaver (Run as `algo_cmo`)
+---
+
+### First-Time Setup (One-Time Only)
+
+#### 1. Database Setup in DBeaver (Run as `algo_cmo`)
 
 1. Open DBeaver and connect as `algo_cmo`.
 2. Run [create_role.sql](create_role.sql) to provision the restricted `ninai_app` application role with permissions granted on `users`, `leads`, `lead_notes`, and `messages`.
-3. *(Optional)* Run [schema_changes.sql](schema_changes.sql) if you wish to add dedicated typed columns for extended CRM fields (`company`, `priority`, `value`, `archived`, etc.).
+3. *(Optional)* Run [schema_changes.sql](schema_changes.sql) to add extended CRM columns (`company`, `priority`, `value`, `archived`, etc.).
 
-### 2. Environment Variables (`.env`)
+#### 2. Environment Variables (`.env`)
 
-Copy `.env.example` to `.env` and fill in the values:
+> ⚠️ The `.env` file is **gitignored** and must be created manually on every machine that runs this app.
+
+Copy `.env.example` to `.env`:
 ```bash
 cp .env.example .env
 ```
+
+Fill in the values:
 
 | Variable | Description |
 |---|---|
 | `DB_HOST` | RDS endpoint: `ninai.cv2qy2qo683f.ap-south-1.rds.amazonaws.com` |
 | `DB_PORT` | `5432` |
 | `DB_NAME` | `ninai` |
-| `DB_USER` | `ninai_app` (never use `algo_cmo`) |
-| `DB_PASSWORD` | Password created for `ninai_app` in `create_role.sql` |
-| `JWT_SECRET` | Strong random secret string for signing session tokens |
-| `PORT` | `3001` (backend port) |
+| `DB_USER` | `ninai_app` (**never** use `algo_cmo`) |
+| `DB_PASSWORD` | Password for `ninai_app` |
+| `JWT_SECRET` | Strong random secret for signing session tokens |
+| `PORT` | `3001` (backend API port) |
 
-### 3. How to Run Locally
+---
+
+### Running After a Merge / Pull
+
+After merging or pulling changes from the branch:
+
+```powershell
+# 1. Switch to main and pull
+git checkout main
+git pull
+
+# 2. Install any new dependencies
+npm install
+
+# 3. Confirm .env exists (it won't come with the merge — it's gitignored)
+#    If missing, recreate it from .env.example
+
+# 4. Start the app
+npm run start:all
+```
+
+Then open **http://localhost:5173** and log in.
+
+> **Important:** The API server (port 3001) must be running at all times — without it, login and all CRM features return a 500 error.
+
+---
+
+### Daily Run (After Setup)
 
 ```bash
-# 1. Start the backend API server (port 3001)
-npm run server
-
-# 2. Start the Vite dev frontend (port 5173, proxied to API)
-npm run dev
-
-# Or run both simultaneously:
+# Recommended: start both API server + frontend together
 npm run start:all
 
-# Or run desktop Electron app:
+# Or separately:
+npm run server   # Terminal 1 — API (port 3001)
+npm run dev      # Terminal 2 — Frontend (port 5173)
+
+# Desktop (Electron) mode:
 npm run desktop
 ```
 
-### 4. Data Migration
+---
 
-To import existing local records into the cloud PostgreSQL database:
+### Test the Connection
+
 ```bash
-# Dry-run check (safe, 0 database writes):
+npm run test:db
+```
+
+Confirms the SSL connection to RDS and that all 4 CRM tables are accessible.
+
+---
+
+### Add a New User (DBeaver, run as `algo_cmo`)
+
+```sql
+INSERT INTO users (name, email, password_hash)
+VALUES ('Name', 'email@example.com', crypt('PASSWORD', gen_salt('bf')))
+ON CONFLICT (email) DO NOTHING;
+```
+
+---
+
+### Data Migration (Local → Cloud)
+
+To import existing local Dexie records into PostgreSQL:
+
+```bash
+# Dry-run (safe, no DB writes):
 npm run migrate -- --file path/to/leads.json
 
-# Execute idempotent migration:
+# Apply migration:
 npm run migrate:apply -- --file path/to/leads.json
 ```
 
-### 5. What Is NOT Done Yet (Out of Scope)
+---
 
-* **Cloud Hosting:** The Node backend API currently runs locally on your laptop on port 3001. Deployment to AWS/Render/fly.io is a separate session.
-* **CI/CD Pipelines:** Automated build and test workflows are not configured for the backend.
-* **Non-CRM Tables in Cloud:** General notebook notes (`notes`, `folders`), `projects`, `tasks`, and `calendarEvents` continue to use local Dexie storage. Only CRM (`leads`, `lead_notes`, `users`, and `messages`) are cloud-backed.
-* **AWS Infrastructure Changes:** No VPC, security group, or RDS parameter changes were made.
+### What Stays Local (Dexie — Not Cloud-Backed)
+
+| Data | Storage |
+|------|---------|
+| Notes, Folders | Local IndexedDB (Dexie) |
+| Projects | Local IndexedDB (Dexie) |
+| Tasks | Local IndexedDB (Dexie) |
+| Calendar Events | Local IndexedDB (Dexie) |
+| **Leads, Notes on Leads** | ✅ **AWS RDS PostgreSQL** |
+| **Users, Auth** | ✅ **AWS RDS PostgreSQL** |
+| **Founder Messages** | ✅ **AWS RDS PostgreSQL** |
+
+---
+
+### Out of Scope
+
+* Cloud hosting of the Node API server (runs locally on port 3001)
+* CI/CD pipelines
+* ORMs or migration frameworks
+* AWS infrastructure changes (VPC, security groups, RDS settings)
 
 ---
 
@@ -260,8 +332,13 @@ ninai/
 
 | Script | Description |
 |---|---|
+| `npm run start:all` | **Start API server + Vite frontend together (recommended)** |
+| `npm run server` | Start Express API server only (port 3001) |
+| `npm run dev` | Start Vite dev server only (browser preview, port 5173) |
 | `npm run desktop` | Start Electron + Vite dev server with hot reload |
-| `npm run dev` | Start Vite dev server only (browser preview, no Electron) |
+| `npm run test:db` | Test SSL connection to AWS RDS PostgreSQL |
+| `npm run migrate` | Dry-run local → cloud data migration |
+| `npm run migrate:apply` | Execute local → cloud data migration |
 | `npm run build` | TypeScript check + Vite production build |
 | `npm run dist` | Build + package for current platform |
 | `npm run dist:all` | Build + package for macOS, Windows, and Linux |
