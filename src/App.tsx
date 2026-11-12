@@ -18,11 +18,12 @@ import { TasksView } from './components/workspace/TasksView';
 import { CalendarView } from './components/workspace/CalendarView';
 import { SettingsView } from './components/workspace/SettingsView';
 import { GmailView } from './components/workspace/GmailView';
+import { FounderChannelView } from './components/workspace/FounderChannelView';
 import { countPendingGmailMessages } from './services/gmailSync';
 import { GlobalSearch } from './components/workspace/GlobalSearch';
 import type { ModuleId, WorkspaceNav } from './types/workspace';
 
-const MODULE_IDS: ModuleId[] = ['today', 'dashboard', 'crm', 'institutions', 'analytics', 'projects', 'followups', 'tasks', 'notes', 'calendar', 'settings', 'gmail', 'tools'];
+const MODULE_IDS: ModuleId[] = ['today', 'dashboard', 'founder', 'crm', 'institutions', 'analytics', 'projects', 'followups', 'tasks', 'notes', 'calendar', 'settings', 'gmail', 'tools'];
 
 function readModule(): ModuleId {
     const saved = localStorage.getItem('ninai_active_module') as ModuleId | null;
@@ -240,6 +241,8 @@ function App() {
                 return <TodayView workspaceId={workspace.id} userId={user.id} userName={user.name} nav={nav} />;
             case 'dashboard':
                 return <DashboardView workspaceId={workspace.id} userId={user.id} userName={user.name} nav={nav} />;
+            case 'founder':
+                return <FounderChannelView />;
             case 'crm':
                 return (
                     <CRMView

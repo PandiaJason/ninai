@@ -1,6 +1,7 @@
 export type ModuleId =
     | 'today'
     | 'dashboard'
+    | 'founder'
     | 'crm'
     | 'institutions'
     | 'analytics'

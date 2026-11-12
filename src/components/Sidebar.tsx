@@ -21,6 +21,7 @@ interface SidebarProps {
 
 const PRIMARY_MODULES: { id: ModuleId; label: string; icon: IconName }[] = [
     { id: 'dashboard', label: 'Overview', icon: 'dashboard' },
+    { id: 'founder', label: 'Founder Channel', icon: 'message' },
     { id: 'crm', label: 'Learners', icon: 'crm' },
     { id: 'institutions', label: 'Institutions', icon: 'building' },
     { id: 'projects', label: 'Projects', icon: 'projects' },
