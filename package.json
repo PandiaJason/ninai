@@ -9,6 +9,7 @@
   "description": "The New Interface for AI. Ninai is a local-first productivity application.",
   "scripts": {
     "server": "node server/index.js",
+    "test:db": "node scripts/test-db.js",
     "migrate": "node scripts/migrate.js --dry-run",
     "migrate:apply": "node scripts/migrate.js --apply",
     "dev": "vite",
