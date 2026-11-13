@@ -1,12 +1,14 @@
 import {
     db,
+    DEFAULT_ADMIN_USER_ID,
     DEFAULT_INSTITUTION_STAGES,
     DEFAULT_STAGES,
     DEFAULT_WORKSPACE_ID,
     type Workspace,
     type MemberRole,
 } from '../db';
-import { requireUser, type SessionUser, publicUser } from './auth';
+import { requireUser, type SessionUser, publicUser, setUserActive } from './auth';
+import { apiRequest } from './api';
 import { AppError } from './errors';
 import { assertWorkspaceAccess, requireAdmin } from './permissions';
 import { optional, required } from './validation';
@@ -200,7 +202,13 @@ export async function listWorkspaceUsers(workspaceId: string): Promise<Workspace
     const users = await db.users.bulkGet(members.map(m => m.userId));
     const userMap = new Map(users.filter(Boolean).map(u => [u!.id, u!]));
 
-    return members
+    // The placeholder owner that first run creates is not a real teammate.
+    // Once somebody real is in the workspace it is hidden from the list.
+    const visible = members.some(m => m.userId !== DEFAULT_ADMIN_USER_ID)
+        ? members.filter(m => m.userId !== DEFAULT_ADMIN_USER_ID)
+        : members;
+
+    return visible
         .map(m => {
             const user = userMap.get(m.userId);
             if (!user) return null;
@@ -244,10 +252,38 @@ export async function removeWorkspaceMember(workspaceId: string, userId: string)
     if (userId === actor.id) throw new AppError('CONFLICT', 'You cannot remove yourself from the workspace.');
     const workspace = await db.workspaces.get(workspaceId);
     if (workspace?.ownerId === userId) throw new AppError('CONFLICT', 'The workspace owner cannot be removed.');
+
+    if (isCloudAccount(userId)) {
+        await apiRequest(`/users/${userId}`, { method: 'DELETE' });
+    }
+
     await db.workspaceMembers
         .where('[workspaceId+userId]')
         .equals([workspaceId, userId])
         .delete();
+}
+
+/**
+ * Deactivates or reactivates a member.
+ *
+ * Cloud accounts are handled on the server, so the change applies to the
+ * account itself and not just to this machine.
+ */
+export async function setMemberActive(userId: string, active: boolean): Promise<void> {
+    if (isCloudAccount(userId)) {
+        if (active) {
+            await apiRequest(`/users/${userId}/restore`, { method: 'POST' });
+        } else {
+            await apiRequest(`/users/${userId}`, { method: 'DELETE' });
+        }
+        return;
+    }
+    await setUserActive(userId, active);
+}
+
+/** Accounts that live on the server carry a uuid; local ones do not. */
+export function isCloudAccount(userId: string): boolean {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
 }
 
 export async function listNonMembers(workspaceId: string): Promise<WorkspaceUser[]> {

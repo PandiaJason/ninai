@@ -445,6 +445,8 @@ export interface GmailMessage {
 export const DEFAULT_WORKSPACE_ID = 'ws_default';
 export const DEFAULT_ADMIN_EMAIL = 'admin@ninai.app';
 export const DEFAULT_ADMIN_PASSWORD = 'ninai-admin';
+/** The local placeholder owner created on first run, before a real account signs in. */
+export const DEFAULT_ADMIN_USER_ID = 'user_admin';
 
 export const DEFAULT_STAGES: Omit<LeadStage, 'workspaceId'>[] = [
     { id: 'stage_requested', name: 'Requested', color: '#0071e3', order: 0, isWon: 0, isLost: 0, audience: 'learner' },

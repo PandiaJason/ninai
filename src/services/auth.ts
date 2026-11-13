@@ -2,6 +2,7 @@ import {
     db,
     DEFAULT_ADMIN_EMAIL,
     DEFAULT_ADMIN_PASSWORD,
+    DEFAULT_ADMIN_USER_ID,
     DEFAULT_WORKSPACE_ID,
     type MemberRole,
     type User,
@@ -136,16 +137,37 @@ export function ensureSeedData(): Promise<void> {
  * membership row for them and the workspace would come back empty. This
  * makes sure the workspace, pipeline and folders exist locally and then
  * attaches the account with the role the server gave it.
+ *
+ * When the account is an administrator it also takes over from the local
+ * placeholder owner that first run creates, so the team sees only the real
+ * people in the member list.
  */
 async function ensureWorkspaceMembership(user: SessionUser): Promise<void> {
     await ensureSeedData();
+    const isAdmin = user.role === 'admin';
+    const localRole: MemberRole = isAdmin ? 'owner' : 'member';
+
+    if (isAdmin) {
+        // Hand the workspace over from the placeholder to the real account.
+        const workspace = await db.workspaces.get(DEFAULT_WORKSPACE_ID);
+        if (workspace && workspace.ownerId === DEFAULT_ADMIN_USER_ID) {
+            await db.workspaces.update(DEFAULT_WORKSPACE_ID, { ownerId: user.id });
+        }
+        const placeholder = await db.workspaceMembers
+            .where('[workspaceId+userId]')
+            .equals([DEFAULT_WORKSPACE_ID, DEFAULT_ADMIN_USER_ID])
+            .first();
+        if (placeholder && placeholder.userId !== user.id) {
+            await db.workspaceMembers.delete(placeholder.id);
+        }
+    }
+
     const membership = await db.workspaceMembers
         .where('[workspaceId+userId]')
         .equals([DEFAULT_WORKSPACE_ID, user.id])
         .first();
     if (membership) {
         // Keep the local role in step with the server.
-        const localRole: MemberRole = user.role === 'admin' ? 'owner' : 'member';
         if (membership.role !== localRole) {
             await db.workspaceMembers.update(membership.id, { role: localRole });
         }
@@ -155,7 +177,7 @@ async function ensureWorkspaceMembership(user: SessionUser): Promise<void> {
         id: crypto.randomUUID(),
         workspaceId: DEFAULT_WORKSPACE_ID,
         userId: user.id,
-        role: user.role === 'admin' ? 'owner' : 'member',
+        role: localRole,
         createdAt: Date.now(),
     });
 }
