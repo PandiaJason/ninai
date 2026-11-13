@@ -1,5 +1,6 @@
 import {
     db,
+    DEFAULT_ADMIN_USER_ID,
     DEFAULT_INSTITUTION_STAGES,
     DEFAULT_STAGES,
     DEFAULT_WORKSPACE_ID,
@@ -200,7 +201,13 @@ export async function listWorkspaceUsers(workspaceId: string): Promise<Workspace
     const users = await db.users.bulkGet(members.map(m => m.userId));
     const userMap = new Map(users.filter(Boolean).map(u => [u!.id, u!]));
 
-    return members
+    // The placeholder owner that first run creates is not a real teammate.
+    // Once somebody real is in the workspace it is hidden from the list.
+    const visible = members.some(m => m.userId !== DEFAULT_ADMIN_USER_ID)
+        ? members.filter(m => m.userId !== DEFAULT_ADMIN_USER_ID)
+        : members;
+
+    return visible
         .map(m => {
             const user = userMap.get(m.userId);
             if (!user) return null;

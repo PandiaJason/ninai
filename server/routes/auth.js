@@ -6,6 +6,23 @@ import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
 
+/**
+ * Administrators can also be declared in the environment, as a comma separated
+ * list of addresses. This is the fallback for installations where the `role`
+ * column has not been added to the users table yet; once the column exists it
+ * takes precedence.
+ */
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
+  .split(',')
+  .map(value => value.trim().toLowerCase())
+  .filter(Boolean);
+
+function roleFor(user) {
+  if (user.role) return user.role === 'admin' ? 'admin' : 'member';
+  if (ADMIN_EMAILS.includes(String(user.email || '').toLowerCase())) return 'admin';
+  return 'member';
+}
+
 // Rate limiter for login: 10 attempts per 15 minutes per IP
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -53,7 +70,7 @@ router.post('/login', loginLimiter, async (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
-    const role = user.role === 'admin' ? 'admin' : 'member';
+    const role = roleFor(user);
 
     // Try updating last_login_at if column exists (failsafe if schema_changes not yet run)
     try {
@@ -115,7 +132,7 @@ router.get('/me', authenticateToken, async (req, res) => {
     res.json({
       user: {
         ...row,
-        role: row.role === 'admin' ? 'admin' : 'member',
+        role: roleFor(row),
       },
     });
   } catch (err) {

@@ -17,6 +17,9 @@ export const LoginScreen: React.FC = () => {
     const [serverOpen, setServerOpen] = useState(false);
     const [serverUrl, setServerUrl] = useState(() => getApiBase());
     const firstRun = hasDefaultAdminPassword();
+    // A configured server means the accounts live on the server, so the local
+    // first-run default no longer applies.
+    const hasServer = getApiBase() !== 'http://localhost:3001/api';
 
     const submit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -96,11 +99,18 @@ export const LoginScreen: React.FC = () => {
                         Sign in
                     </Button>
 
-                    {firstRun && (
+                    {firstRun && !hasServer && (
                         <div className="ws-auth-hint">
                             <strong>First time?</strong>
                             <span>Default admin: <code>admin@ninai.app</code> / <code>ninai-admin</code></span>
                             <span>Change this password in Settings after signing in.</span>
+                        </div>
+                    )}
+
+                    {firstRun && hasServer && (
+                        <div className="ws-auth-hint">
+                            <strong>Shared workspace</strong>
+                            <span>Sign in with the account your team uses. If you do not have one yet, ask whoever set up the workspace.</span>
                         </div>
                     )}
 
