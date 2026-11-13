@@ -19,14 +19,45 @@ laptop / Mac ──HTTPS──▶ api.<domain>  (EC2, public IP, :443)
 - Secrets live in `/etc/ninai/api.env` (mode 600, owned by root, read by the
   service through `EnvironmentFile`). Nothing secret is in the repository.
 
+## The sandbox
+
+The API does not run as a bare process. systemd starts it inside **nsjail**:
+
+- new **PID, mount, UTS, IPC and user namespaces** — the process is isolated
+- the **user namespace** maps the app to uid 993 (`ninai`), so it holds no
+  privileges over the host
+- **mount namespace**: only `/usr`, `/lib`, `/lib64`, `/etc`, `/dev`,
+  `/run/systemd/resolve` and the app directory are visible; `/opt/ninai` is
+  read-only except `logs/`
+- `/etc/ninai`, `/home/ec2-user` and `/root` are **tmpfs overlays**, so the
+  secrets file and the SSH keys are invisible to the running process even
+  though the parent shell can read them
+- **rlimits** on address space, CPU, file size, open files and processes
+- the network namespace is deliberately **shared**, because the service has to
+  reach the database and accept connections from the local reverse proxy
+
+Verified on the running instance:
+
+```
+mnt: isolated   pid: isolated   uts: isolated
+ipc: isolated   user: isolated  net: shared (as intended)
+uid inside: 993
+/etc/ninai/api.env      -> (blocked: ENOENT)
+/home/ec2-user/.ssh     -> (blocked: ENOENT)
+/root/.ssh              -> (blocked: ENOENT)
+```
+
 ## One-time setup on the instance
+
+Amazon Linux 2023 (the AMI used here):
 
 ```bash
 # 1. packages
-sudo apt-get update && sudo apt-get install -y nodejs npm git
+sudo dnf install -y nodejs npm git cronie postgresql18
+#    (Node 22 from NodeSource: rpm.nodesource.com/setup_22.x)
 
 # 2. service user
-sudo useradd --system --home /opt/ninai --shell /usr/sbin/nologin ninai
+sudo useradd --system --home /opt/ninai --shell /sbin/nologin ninai
 
 # 3. application
 sudo -u ninai git clone <repo> /opt/ninai
@@ -42,18 +73,24 @@ curl -o /etc/ninai/global-bundle.pem https://truststore.pki.rds.amazonaws.com/gl
 # then add this line to /etc/ninai/api.env:
 #   DB_SSL_CA=/etc/ninai/global-bundle.pem
 
-# 5. systemd
+# 5. nsjail
+git clone --depth 1 https://github.com/google/nsjail.git /tmp/nsjail
+cd /tmp/nsjail && sudo dnf install -y flex bison && sudo make -j2 nsjail
+sudo install -m 755 /tmp/nsjail/nsjail /usr/local/bin/nsjail
+
+# 6. systemd
 sudo cp /opt/ninai/deploy/ninai-api.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now ninai-api
 
-# 6. TLS
+# 7. TLS
 sudo cp /opt/ninai/deploy/Caddyfile /etc/caddy/Caddyfile
 sudo systemctl reload caddy
 ```
 
 `JWT_SECRET` is generated with `openssl rand -hex 32`. Changing it signs
 every one of your team out, so treat it as permanent.
+
 
 ## Everyday commands
 
