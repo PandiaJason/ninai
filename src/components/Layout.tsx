@@ -12,10 +12,7 @@ interface LayoutProps {
     notesLocked?: boolean;
     // Hide the main content area while keeping it mounted.
     contentHidden?: boolean;
-    hideSidebarToggle?: boolean;
     // Controlled State
-    isSidebarOpen: boolean;
-    setSidebarOpen: (v: boolean) => void;
     isNotesOpen: boolean;
     setNotesOpen: (v: boolean) => void;
 }
@@ -25,14 +22,15 @@ export const Layout: React.FC<LayoutProps> = ({
     fullNotes = false,
     notesLocked = false,
     contentHidden = false,
-    hideSidebarToggle = false,
-    isSidebarOpen, setSidebarOpen, isNotesOpen, setNotesOpen
+    isNotesOpen, setNotesOpen
 }) => {
     // Default to 50% width to match "Split View" expectation
     const [panelWidth, setPanelWidth] = React.useState(() => {
         return window.innerWidth * 0.5;
     });
     const [isResizing, setIsResizing] = React.useState(false);
+    // macOS uses a hidden inset title bar, so the sidebar keeps room for the traffic lights.
+    const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform || navigator.userAgent);
 
     const notesOnly = zenMode || fullNotes;
     const notesOpen = notesOnly ? true : notesLocked ? false : isNotesOpen;
@@ -114,32 +112,15 @@ export const Layout: React.FC<LayoutProps> = ({
     }, [resize, stopResizing]);
 
     return (
-        <div className={`app-layout ${isResizing ? 'resizing' : ''} ${zenMode ? 'zen-mode' : ''}`}>
+        <div className={`app-layout ${isResizing ? 'resizing' : ''} ${zenMode ? 'zen-mode' : ''} ${isMac ? 'mac-frame' : ''}`}>
             {!zenMode && (
-                <aside className={`layout-sidebar glass ${!isSidebarOpen ? 'collapsed' : ''}`}>
+                <aside className="layout-sidebar glass">
                     {sidebar}
-                    {!hideSidebarToggle && (
-                        <button
-                            className="sidebar-toggle"
-                            onClick={() => setSidebarOpen(!isSidebarOpen)}
-                            title={isSidebarOpen ? "Collapse Sidebar" : "Expand Sidebar"}
-                        >
-                            {isSidebarOpen ? '«' : '»'}
-                        </button>
-                    )}
                 </aside>
             )}
 
             <main className={`layout-content ${!contentVisible ? 'hidden' : ''}`}>
                 {children}
-                {!isSidebarOpen && contentVisible && (
-                    <button
-                        className="sidebar-toggle-floating"
-                        onClick={() => setSidebarOpen(true)}
-                    >
-                        »
-                    </button>
-                )}
             </main>
 
             {/* Resizer - Absolute */}

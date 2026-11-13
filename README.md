@@ -20,6 +20,141 @@
 
 ---
 
+## ALGO CRM — Cloud PostgreSQL Backend
+
+Ninai includes a built-in CRM backed by AWS RDS PostgreSQL, accessed through a lightweight local Express API. Leads, notes, founder messages, and user authentication are all cloud-persisted. Local Dexie storage is used only for notes, projects, tasks, and calendar events.
+
+---
+
+### First-Time Setup (One-Time Only)
+
+#### 1. Database Setup in DBeaver (Run as `algo_cmo`)
+
+1. Open DBeaver and connect as `algo_cmo`.
+2. Run [create_role.sql](create_role.sql) to provision the restricted `ninai_app` application role with permissions granted on `users`, `leads`, `lead_notes`, and `messages`.
+3. *(Optional)* Run [schema_changes.sql](schema_changes.sql) to add extended CRM columns (`company`, `priority`, `value`, `archived`, etc.).
+
+#### 2. Environment Variables (`.env`)
+
+> ⚠️ The `.env` file is **gitignored** and must be created manually on every machine that runs this app.
+
+Copy `.env.example` to `.env`:
+```bash
+cp .env.example .env
+```
+
+Fill in the values:
+
+| Variable | Description |
+|---|---|
+| `DB_HOST` | RDS endpoint: `ninai.cv2qy2qo683f.ap-south-1.rds.amazonaws.com` |
+| `DB_PORT` | `5432` |
+| `DB_NAME` | `ninai` |
+| `DB_USER` | `ninai_app` (**never** use `algo_cmo`) |
+| `DB_PASSWORD` | Password for `ninai_app` |
+| `JWT_SECRET` | Strong random secret for signing session tokens |
+| `PORT` | `3001` (backend API port) |
+
+---
+
+### Running After a Merge / Pull
+
+After merging or pulling changes from the branch:
+
+```powershell
+# 1. Switch to main and pull
+git checkout main
+git pull
+
+# 2. Install any new dependencies
+npm install
+
+# 3. Confirm .env exists (it won't come with the merge — it's gitignored)
+#    If missing, recreate it from .env.example
+
+# 4. Start the app
+npm run start:all
+```
+
+Then open **http://localhost:5173** and log in.
+
+> **Important:** The API server (port 3001) must be running at all times — without it, login and all CRM features return a 500 error.
+
+---
+
+### Daily Run (After Setup)
+
+```bash
+# Recommended: start both API server + frontend together
+npm run start:all
+
+# Or separately:
+npm run server   # Terminal 1 — API (port 3001)
+npm run dev      # Terminal 2 — Frontend (port 5173)
+
+# Desktop (Electron) mode:
+npm run desktop
+```
+
+---
+
+### Test the Connection
+
+```bash
+npm run test:db
+```
+
+Confirms the SSL connection to RDS and that all 4 CRM tables are accessible.
+
+---
+
+### Add a New User (DBeaver, run as `algo_cmo`)
+
+```sql
+INSERT INTO users (name, email, password_hash)
+VALUES ('Name', 'email@example.com', crypt('PASSWORD', gen_salt('bf')))
+ON CONFLICT (email) DO NOTHING;
+```
+
+---
+
+### Data Migration (Local → Cloud)
+
+To import existing local Dexie records into PostgreSQL:
+
+```bash
+# Dry-run (safe, no DB writes):
+npm run migrate -- --file path/to/leads.json
+
+# Apply migration:
+npm run migrate:apply -- --file path/to/leads.json
+```
+
+---
+
+### What Stays Local (Dexie — Not Cloud-Backed)
+
+| Data | Storage |
+|------|---------|
+| Notes, Folders | Local IndexedDB (Dexie) |
+| Projects | Local IndexedDB (Dexie) |
+| Tasks | Local IndexedDB (Dexie) |
+| Calendar Events | Local IndexedDB (Dexie) |
+| **Leads, Notes on Leads** | ✅ **AWS RDS PostgreSQL** |
+| **Users, Auth** | ✅ **AWS RDS PostgreSQL** |
+| **Founder Messages** | ✅ **AWS RDS PostgreSQL** |
+
+---
+
+### Out of Scope
+
+* Cloud hosting of the Node API server (runs locally on port 3001)
+* CI/CD pipelines
+* ORMs or migration frameworks
+* AWS infrastructure changes (VPC, security groups, RDS settings)
+
+---
+
 ## Why NINAI?
 
 Inspired by limitations in existing AI note-taking tools, developed NINAI to provide persistent note management while integrating multiple LLMs using users' own subscriptions — eliminating the need for separate API access.
@@ -197,8 +332,13 @@ ninai/
 
 | Script | Description |
 |---|---|
+| `npm run start:all` | **Start API server + Vite frontend together (recommended)** |
+| `npm run server` | Start Express API server only (port 3001) |
+| `npm run dev` | Start Vite dev server only (browser preview, port 5173) |
 | `npm run desktop` | Start Electron + Vite dev server with hot reload |
-| `npm run dev` | Start Vite dev server only (browser preview, no Electron) |
+| `npm run test:db` | Test SSL connection to AWS RDS PostgreSQL |
+| `npm run migrate` | Dry-run local → cloud data migration |
+| `npm run migrate:apply` | Execute local → cloud data migration |
 | `npm run build` | TypeScript check + Vite production build |
 | `npm run dist` | Build + package for current platform |
 | `npm run dist:all` | Build + package for macOS, Windows, and Linux |
@@ -225,6 +365,10 @@ npm install
 This is expected without an Apple Developer certificate. The app will still run but macOS Gatekeeper may warn users. For distribution, set up code signing via electron-builder docs.
 
 ---
+
+## Workspace, backups and packaging
+
+Projects, unified follow-ups, version history, cloud backup, Git export and the multi-OS build workflow are documented in [docs/WORKSPACE.md](docs/WORKSPACE.md).
 
 ## Contributing
 

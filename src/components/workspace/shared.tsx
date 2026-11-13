@@ -1,7 +1,8 @@
 import React from 'react';
-import type { Priority, TaskStatus } from '../../db';
+import type { Priority, ProjectStatus, TaskStatus } from '../../db';
 import { PRIORITY_LABEL } from '../../services/validation';
 import { TASK_STATUS_LABEL } from '../../services/tasks';
+import { PROJECT_STATUS_LABEL } from '../../services/projects';
 import { Badge, Spinner } from '../ui/Misc';
 import { Icon, type IconName } from '../ui/Icon';
 
@@ -40,6 +41,19 @@ export const TASK_STATUS_TONE: Record<TaskStatus, 'neutral' | 'blue' | 'green' |
 
 export const TaskStatusBadge: React.FC<{ status: TaskStatus }> = ({ status }) => (
     <Badge tone={TASK_STATUS_TONE[status]}>{TASK_STATUS_LABEL[status]}</Badge>
+);
+
+export const PROJECT_STATUS_TONE: Record<ProjectStatus, 'neutral' | 'blue' | 'green' | 'orange' | 'red' | 'purple'> = {
+    not_started: 'neutral',
+    planning: 'purple',
+    in_progress: 'blue',
+    on_hold: 'orange',
+    completed: 'green',
+    cancelled: 'red',
+};
+
+export const ProjectStatusBadge: React.FC<{ status: ProjectStatus }> = ({ status }) => (
+    <Badge tone={PROJECT_STATUS_TONE[status]}>{PROJECT_STATUS_LABEL[status]}</Badge>
 );
 
 export function formatMoney(value: number): string {

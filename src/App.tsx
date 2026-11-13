@@ -3,20 +3,28 @@ import { Layout } from './components/Layout';
 import { Sidebar } from './components/Sidebar';
 import { NotesPanel } from './components/NotesPanel';
 import { ToolView } from './components/ToolView';
-import { TOOLS } from './data/tools';
+import { TOOLS, type Tool } from './data/tools';
 
 import { Onboarding } from './components/Onboarding';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { useAuth } from './context/AuthContext';
+import { TodayView } from './components/workspace/TodayView';
 import { DashboardView } from './components/workspace/DashboardView';
 import { CRMView } from './components/workspace/CRMView';
+import { AnalyticsView } from './components/workspace/AnalyticsView';
+import { ProjectsView } from './components/workspace/ProjectsView';
+import { FollowUpsView } from './components/workspace/FollowUpsView';
 import { TasksView } from './components/workspace/TasksView';
 import { CalendarView } from './components/workspace/CalendarView';
 import { SettingsView } from './components/workspace/SettingsView';
+import { GmailView } from './components/workspace/GmailView';
+import { FounderChannelView } from './components/workspace/FounderChannelView';
+import { countPendingGmailMessages } from './services/gmailSync';
 import { GlobalSearch } from './components/workspace/GlobalSearch';
+import { EmptyState } from './components/ui/Misc';
 import type { ModuleId, WorkspaceNav } from './types/workspace';
 
-const MODULE_IDS: ModuleId[] = ['dashboard', 'crm', 'tasks', 'notes', 'calendar', 'settings', 'tools'];
+const MODULE_IDS: ModuleId[] = ['today', 'dashboard', 'founder', 'crm', 'institutions', 'analytics', 'projects', 'followups', 'tasks', 'notes', 'calendar', 'settings', 'gmail', 'tools'];
 
 function readModule(): ModuleId {
     const saved = localStorage.getItem('ninai_active_module') as ModuleId | null;
@@ -42,8 +50,7 @@ function App() {
         return loaded;
     });
 
-    const [activeToolId, setActiveToolId] = useState(tools[0].id);
-    const activeTool = tools.find((t: any) => t.id === activeToolId) || tools[0];
+    const [activeToolId, setActiveToolId] = useState(tools[0]?.id || '');
 
     useEffect(() => {
         localStorage.setItem('ninai_tools', JSON.stringify(tools));
@@ -65,37 +72,65 @@ function App() {
     const handleDeleteTool = (id: string) => {
         const newTools = tools.filter((t: any) => t.id !== id);
         setTools(newTools);
-        if (activeToolId === id && newTools.length > 0) {
-            setActiveToolId(newTools[0].id);
+        if (activeToolId === id) {
+            setActiveToolId(newTools[0]?.id || '');
         }
+    };
+
+    // Put a default site (ChatGPT, Google, Claude, Gemini) back in the tools rail.
+    const handleRestoreTool = (tool: Tool) => {
+        if (tools.some((t: any) => t.id === tool.id)) return;
+        setTools([...tools, tool]);
+        setActiveToolId(tool.id);
     };
 
     // --- Workspace Navigation ---
     const [activeModule, setActiveModule] = useState<ModuleId>(readModule);
     const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+    const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
     const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
     const [externalNoteId, setExternalNoteId] = useState<string | null>(null);
     const [searchOpen, setSearchOpen] = useState(false);
+    const [gmailPending, setGmailPending] = useState(0);
 
     useEffect(() => {
         localStorage.setItem('ninai_active_module', activeModule);
     }, [activeModule]);
 
+    // Keep the Gmail badge in the sidebar in step with the review queue.
+    useEffect(() => {
+        if (!workspace) return;
+        let cancelled = false;
+        void countPendingGmailMessages(workspace.id)
+            .then(count => { if (!cancelled) setGmailPending(count); })
+            .catch(() => { if (!cancelled) setGmailPending(0); });
+        return () => { cancelled = true; };
+    }, [workspace?.id, activeModule]);
+
     const go = useCallback((module: ModuleId) => {
         setActiveModule(module);
         setSelectedLeadId(null);
+        setSelectedProjectId(null);
         setSelectedTaskId(null);
     }, []);
 
     const nav = useMemo<WorkspaceNav>(() => ({
         go,
         openLead: (leadId) => {
+            setSelectedProjectId(null);
             setSelectedTaskId(null);
             setSelectedLeadId(leadId);
-            setActiveModule('crm');
+            setActiveModule(current => (current === 'institutions' ? 'institutions' : 'crm'));
+        },
+        openProject: (projectId) => {
+            setSelectedLeadId(null);
+            setSelectedTaskId(null);
+            setSelectedProjectId(projectId);
+            setActiveModule('projects');
         },
         openTask: (taskId) => {
             setSelectedLeadId(null);
+            setSelectedProjectId(null);
             setSelectedTaskId(taskId);
             setActiveModule('tasks');
         },
@@ -116,22 +151,15 @@ function App() {
         localStorage.setItem('ninai_zen_mode', zenMode.toString());
     }, [zenMode]);
 
-    // --- Layout State (Hoisted for "Maximize Browser") ---
-    const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+    // --- Layout State (Notes panel) ---
     const [isNotesOpen, setIsNotesOpen] = useState(true);
-
-    // Helper to Maximize Browser (Hide Sidebar & Notes)
-    const maximizeBrowser = () => {
-        setIsSidebarOpen(false);
-        setIsNotesOpen(false);
-        setZenMode(false);
-    };
 
     // Reset transient view state when the active workspace changes.
     const prevWorkspaceId = useRef<string | undefined>(undefined);
     useEffect(() => {
         if (prevWorkspaceId.current && prevWorkspaceId.current !== workspace?.id) {
             setSelectedLeadId(null);
+            setSelectedProjectId(null);
             setSelectedTaskId(null);
             setExternalNoteId(null);
             setActiveModule(module => (module === 'tools' ? module : 'dashboard'));
@@ -216,18 +244,48 @@ function App() {
 
     const renderModule = () => {
         switch (activeModule) {
+            case 'today':
+                return <TodayView workspaceId={workspace.id} userId={user.id} userName={user.name} nav={nav} />;
             case 'dashboard':
                 return <DashboardView workspaceId={workspace.id} userId={user.id} userName={user.name} nav={nav} />;
+            case 'founder':
+                return <FounderChannelView />;
             case 'crm':
                 return (
                     <CRMView
                         workspaceId={workspace.id}
                         userId={user.id}
+                        audience="learner"
                         selectedLeadId={selectedLeadId}
                         onCloseLead={() => setSelectedLeadId(null)}
                         nav={nav}
                     />
                 );
+            case 'institutions':
+                return (
+                    <CRMView
+                        workspaceId={workspace.id}
+                        userId={user.id}
+                        audience="institution"
+                        defaultView="kanban"
+                        selectedLeadId={selectedLeadId}
+                        onCloseLead={() => setSelectedLeadId(null)}
+                        nav={nav}
+                    />
+                );
+            case 'analytics':
+                return <AnalyticsView workspaceId={workspace.id} nav={nav} />;
+            case 'projects':
+                return (                    <ProjectsView
+                        workspaceId={workspace.id}
+                        userId={user.id}
+                        selectedProjectId={selectedProjectId}
+                        onCloseProject={() => setSelectedProjectId(null)}
+                        nav={nav}
+                    />
+                );
+            case 'followups':
+                return <FollowUpsView workspaceId={workspace.id} userId={user.id} nav={nav} />;
             case 'tasks':
                 return (
                     <TasksView
@@ -242,6 +300,8 @@ function App() {
                 return <CalendarView workspaceId={workspace.id} nav={nav} />;
             case 'settings':
                 return <SettingsView />;
+            case 'gmail':
+                return <GmailView workspaceId={workspace.id} nav={nav} />;
             case 'notes':
             case 'tools':
             default:
@@ -255,15 +315,17 @@ function App() {
             sidebar={
                 <Sidebar
                     tools={tools}
-                    activeToolId={activeTool.id}
+                    activeToolId={activeToolId}
                     onSelectTool={selectTool}
                     onAddTool={handleAddTool}
                     onDeleteTool={handleDeleteTool}
+                    onRestoreTool={handleRestoreTool}
                     activeModule={activeModule}
                     onSelectModule={go}
                     onOpenSearch={() => setSearchOpen(true)}
                     workspaceName={workspace.name}
                     onSignOut={() => void logout()}
+                    gmailPending={gmailPending}
                 />
             }
             insightPanel={(
@@ -281,9 +343,6 @@ function App() {
             fullNotes={notesModule}
             notesLocked={workspaceModule && !notesModule}
             contentHidden={notesModule}
-            hideSidebarToggle={workspaceModule}
-            isSidebarOpen={workspaceModule ? true : isSidebarOpen}
-            setSidebarOpen={workspaceModule ? () => { } : setIsSidebarOpen}
             isNotesOpen={isNotesOpen}
             setNotesOpen={setIsNotesOpen}
         >
@@ -293,7 +352,7 @@ function App() {
                     <div
                         key={tool.id}
                         style={{
-                            display: activeTool.id === tool.id ? 'block' : 'none',
+                            display: activeToolId === tool.id ? 'block' : 'none',
                             height: '100%',
                             width: '100%'
                         }}
@@ -304,11 +363,18 @@ function App() {
                                 else delete toolRefs.current[tool.id];
                             }}
                             tool={tool}
-                            onMaximize={maximizeBrowser}
-                            isMaximized={!isSidebarOpen && !isNotesOpen}
                         />
                     </div>
                 ))}
+                {tools.length === 0 && (
+                    <div className="ws-module ws-module-inner">
+                        <EmptyState
+                            icon="globe"
+                            title="No sites yet"
+                            description="Add a site from the Tools section of the sidebar to open it beside your workspace."
+                        />
+                    </div>
+                )}
             </div>
 
             {workspaceModule && !notesModule && renderModule()}

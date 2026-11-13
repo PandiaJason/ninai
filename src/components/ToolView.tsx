@@ -1,19 +1,18 @@
 
 import { useRef, useEffect, useState, useImperativeHandle, forwardRef } from 'react';
-import './ToolView.css';
+import { Icon } from './ui/Icon';
 import { type Tool } from '../data/tools';
+import './ToolView.css';
 
 interface ToolViewProps {
     tool: Tool;
-    onMaximize?: () => void;
-    isMaximized?: boolean;
 }
 
 export interface ToolViewHandle {
     getSelectionHTML: () => Promise<string>;
 }
 
-export const ToolView = forwardRef<ToolViewHandle, ToolViewProps>(({ tool, onMaximize, isMaximized }, ref) => {
+export const ToolView = forwardRef<ToolViewHandle, ToolViewProps>(({ tool }, ref) => {
     const webviewRef = useRef<any>(null);
     const [canGoBack, setCanGoBack] = useState(false);
     const [canGoForward, setCanGoForward] = useState(false);
@@ -117,52 +116,28 @@ export const ToolView = forwardRef<ToolViewHandle, ToolViewProps>(({ tool, onMax
 
     return (
         <div className="tool-view-container">
-            {/* Browser Bar */}
-            <header className="browser-bar">
-                <div className="browser-nav-group">
-                    {/* Maximize Toggle (if available) */}
-                    {onMaximize && (
-                        <button
-                            className={`icon-btn ${isMaximized ? 'active' : ''} `}
-                            onClick={onMaximize}
-                            title={isMaximized ? "Browser is Maximized" : "Maximize Browser"}
-                            style={{ marginRight: '6px' }} // Spacing
-                        >
-                            {!isMaximized ?
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></svg>
-                                :
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" /></svg>
-                            }
-                        </button>
-                    )}
-
-                    <button className="icon-btn" onClick={goBack} disabled={!canGoBack} title="Back">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6" /></svg>
+            {/* App-style header — no browser chrome */}
+            <header className="tool-header">
+                <span className="tool-header-mark" style={{ color: tool.color, borderColor: `${tool.color}33`, background: `${tool.color}12` }}>
+                    {tool.label}
+                </span>
+                <span className="tool-header-name">{tool.name}</span>
+                <div className="tool-header-actions">
+                    <button className="tool-header-btn" onClick={goBack} disabled={!canGoBack} title="Back" aria-label="Go back">
+                        <Icon name="arrow-left" size={15} />
                     </button>
-                    <button className="icon-btn" onClick={goForward} disabled={!canGoForward} title="Forward">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6" /></svg>
+                    <button className="tool-header-btn" onClick={goForward} disabled={!canGoForward} title="Forward" aria-label="Go forward">
+                        <Icon name="arrow-right" size={15} />
                     </button>
-                    <button className="icon-btn" onClick={reload} title="Reload">
-                        {isLoading ? (
-                            <span className="spinner-small" />
-                        ) : (
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-                        )}
+                    <button className="tool-header-btn" onClick={reload} title="Reload" aria-label="Reload">
+                        {isLoading ? <span className="spinner-small" /> : <Icon name="refresh" size={14} />}
                     </button>
                 </div>
-
-                <div className="omnibar">
-                    <span className="lock-icon">🔒</span>
-                    <span className="url-text">{tool.url}</span>
-                </div>
-
-                {/* Placeholder for right-side actions if needed */}
-                <div style={{ width: '80px' }}></div>
             </header>
 
             {/* Main Content Area */}
             <div className="tool-content-area-iframe">
-                {/* 
+                {/*
                   Using webview tag for full browser capabilities (login persistence, back/forward).
                   This requires 'webviewTag: true' in main.js
                 */}
@@ -170,7 +145,7 @@ export const ToolView = forwardRef<ToolViewHandle, ToolViewProps>(({ tool, onMax
                     ref={webviewRef}
                     src={tool.url}
                     className="tool-frame"
-                    allowpopups={true}
+                    allowpopups={'true' as unknown as boolean}
                     // @ts-ignore - webview types
                     partition={`persist:${tool.id} `} // Unique partition per tool saves login state
                     useragent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36"

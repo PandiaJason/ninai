@@ -26,7 +26,7 @@ export const EVENT_TYPE_LABEL: Record<CalendarEventType, string> = {
 
 export interface CalendarItem {
     id: string;
-    source: 'event' | 'task' | 'lead' | 'lead_activity';
+    source: 'event' | 'task' | 'lead' | 'lead_activity' | 'followup' | 'project';
     title: string;
     subtitle?: string;
     startAt: number;
@@ -34,7 +34,7 @@ export interface CalendarItem {
     allDay: boolean;
     type: CalendarEventType;
     color: string;
-    entityType?: 'lead' | 'task';
+    entityType?: 'lead' | 'task' | 'project';
     entityId?: string;
     completed?: boolean;
 }
@@ -48,6 +48,7 @@ export interface CalendarEventInput {
     endAt: number;
     allDay?: boolean;
     leadId?: string | null;
+    projectId?: string | null;
     taskId?: string | null;
 }
 
@@ -63,6 +64,10 @@ async function validateAssociations(workspaceId: string, input: CalendarEventInp
     if (input.leadId) {
         const lead = await db.leads.get(input.leadId);
         if (!lead || lead.workspaceId !== workspaceId) throw new AppError('VALIDATION', 'Lead not found in this workspace.');
+    }
+    if (input.projectId) {
+        const project = await db.projects.get(input.projectId);
+        if (!project || project.workspaceId !== workspaceId) throw new AppError('VALIDATION', 'Project not found in this workspace.');
     }
     if (input.taskId) {
         const task = await db.tasks.get(input.taskId);
@@ -91,18 +96,19 @@ export async function createCalendarEvent(workspaceId: string, input: CalendarEv
         endAt,
         allDay: input.allDay ? 1 : 0,
         leadId: input.leadId || undefined,
+        projectId: input.projectId || undefined,
         taskId: input.taskId || undefined,
         createdBy: actor.id,
         createdAt: Date.now(),
         updatedAt: Date.now(),
     };
     await db.calendarEvents.add(event);
-    if (input.leadId || input.taskId) {
+    if (input.leadId || input.projectId || input.taskId) {
         await logActivity({
             workspaceId,
             userId: actor.id,
-            entityType: input.leadId ? 'lead' : 'task',
-            entityId: (input.leadId || input.taskId)!,
+            entityType: input.leadId ? 'lead' : input.projectId ? 'project' : 'task',
+            entityId: (input.leadId || input.projectId || input.taskId)!,
             action: 'event_created',
             title: `Scheduled ${EVENT_TYPE_LABEL[type].toLowerCase()}: ${title}`,
         });
@@ -118,7 +124,8 @@ export async function getCalendarEvent(eventId: string): Promise<CalendarEvent> 
     return event;
 }
 
-export async function updateCalendarEvent(eventId: string, input: CalendarEventInput): Promise<CalendarEvent> {    const actor = await requireUser();
+export async function updateCalendarEvent(eventId: string, input: CalendarEventInput): Promise<CalendarEvent> {
+    const actor = await requireUser();
     const existing = await db.calendarEvents.get(eventId);
     if (!existing) throw new AppError('NOT_FOUND', 'Event not found.');
     await assertWorkspaceAccess(actor, existing.workspaceId);
@@ -142,6 +149,7 @@ export async function updateCalendarEvent(eventId: string, input: CalendarEventI
         endAt,
         allDay: input.allDay ? 1 : 0,
         leadId: input.leadId || undefined,
+        projectId: input.projectId || undefined,
         taskId: input.taskId || undefined,
         updatedAt: Date.now(),
     };
@@ -171,7 +179,7 @@ export async function getCalendarItems(workspaceId: string, rangeStart: number, 
     const startKey = dateKey(rangeStart);
     const endKey = dateKey(rangeEnd);
 
-    const [events, tasks, leads, leadActivities] = await Promise.all([
+    const [events, tasks, leads, leadActivities, followUps, projects, projectMilestones] = await Promise.all([
         db.calendarEvents
             .where('[workspaceId+startAt]')
             .between([workspaceId, rangeStart], [workspaceId, rangeEnd])
@@ -179,6 +187,9 @@ export async function getCalendarItems(workspaceId: string, rangeStart: number, 
         db.tasks.where('workspaceId').equals(workspaceId).toArray(),
         db.leads.where('workspaceId').equals(workspaceId).toArray(),
         db.leadActivities.where('workspaceId').equals(workspaceId).toArray(),
+        db.followUps.where('workspaceId').equals(workspaceId).toArray(),
+        db.projects.where('workspaceId').equals(workspaceId).toArray(),
+        db.projectMilestones.where('workspaceId').equals(workspaceId).toArray(),
     ]);
 
     const items: CalendarItem[] = [];
@@ -194,8 +205,8 @@ export async function getCalendarItems(workspaceId: string, rangeStart: number, 
             allDay: event.allDay === 1,
             type: event.type,
             color: EVENT_COLORS[event.type],
-            entityType: event.leadId ? 'lead' : event.taskId ? 'task' : undefined,
-            entityId: event.leadId || event.taskId,
+            entityType: event.leadId ? 'lead' : event.projectId ? 'project' : event.taskId ? 'task' : undefined,
+            entityId: event.leadId || event.projectId || event.taskId,
         });
     }
 
@@ -217,8 +228,35 @@ export async function getCalendarItems(workspaceId: string, rangeStart: number, 
         }));
     items.push(...taskItems);
 
-    const followUpItems = leads
-        .filter(l => !l.archived && l.nextFollowUpAt && l.nextFollowUpAt >= rangeStart && l.nextFollowUpAt <= rangeEnd)
+    const followUpItems = followUps
+        .filter(item => item.status === 'pending' && item.dueAt >= rangeStart && item.dueAt <= rangeEnd)
+        .map(item => {
+            const lead = item.entityType === 'lead' ? leads.find(record => record.id === item.entityId) : undefined;
+            const project = item.entityType === 'project' ? projects.find(record => record.id === item.entityId) : undefined;
+            const task = item.entityType === 'task' ? tasks.find(record => record.id === item.entityId) : undefined;
+            const entityTitle = lead?.name || project?.name || task?.title || 'Record';
+            const entityTitleOnly: 'lead' | 'task' | 'project' | undefined = item.entityType === 'lead' || item.entityType === 'task' || item.entityType === 'project'
+                ? item.entityType
+                : undefined;
+            return {
+                id: `followup-${item.id}`,
+                source: 'followup' as const,
+                title: item.title,
+                subtitle: `${entityTitle} · Follow-up`,
+                startAt: item.dueAt,
+                endAt: item.dueAt + 30 * 60_000,
+                allDay: false,
+                type: 'follow_up' as const,
+                color: item.dueAt < Date.now() ? '#ff3b30' : '#34c759',
+                entityType: entityTitleOnly,
+                entityId: entityTitleOnly ? item.entityId : undefined,
+            };
+        });
+    items.push(...followUpItems);
+
+    const leadsWithFollowUps = new Set(followUps.filter(item => item.status === 'pending' && item.entityType === 'lead').map(item => item.entityId));
+    const legacyLeadFollowUps = leads
+        .filter(l => !l.archived && l.nextFollowUpAt && l.nextFollowUpAt >= rangeStart && l.nextFollowUpAt <= rangeEnd && !leadsWithFollowUps.has(l.id))
         .map(lead => ({
             id: `lead-${lead.id}`,
             source: 'lead' as const,
@@ -232,7 +270,28 @@ export async function getCalendarItems(workspaceId: string, rangeStart: number, 
             entityType: 'lead' as const,
             entityId: lead.id,
         }));
-    items.push(...followUpItems);
+    items.push(...legacyLeadFollowUps);
+
+    const projectMilestoneItems = projectMilestones
+        .filter(milestone => milestone.dueDate >= startKey && milestone.dueDate <= endKey)
+        .map(milestone => {
+            const project = projects.find(record => record.id === milestone.projectId);
+            return {
+                id: `milestone-${milestone.id}`,
+                source: 'project' as const,
+                title: milestone.title,
+                subtitle: project ? `${project.name} · Milestone` : 'Project milestone',
+                startAt: dateMs(milestone.dueDate),
+                endAt: dateMs(milestone.dueDate) + 86_400_000 - 1,
+                allDay: true,
+                type: 'deadline' as const,
+                color: milestone.completed === 1 ? '#8e8e93' : '#5e5ce6',
+                entityType: 'project' as const,
+                entityId: milestone.projectId,
+                completed: milestone.completed === 1,
+            };
+        });
+    items.push(...projectMilestoneItems);
 
     const activityItems = leadActivities
         .filter(a => (a.type === 'meeting' || a.type === 'follow_up') && a.occurredAt >= rangeStart && a.occurredAt <= rangeEnd)

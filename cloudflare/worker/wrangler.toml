@@ -1,0 +1,10 @@
+name = "ninai-backup"
+main = "src/index.js"
+compatibility_date = "2026-01-01"
+
+[[r2_buckets]]
+binding = "BACKUPS"
+bucket_name = "ninai-backups"
+
+[vars]
+ALLOWED_ORIGIN = "*"

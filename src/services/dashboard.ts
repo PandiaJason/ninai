@@ -3,6 +3,7 @@ import {
     type Lead,
     type LeadStage,
     type Note,
+    type Project,
     type Task,
 } from '../db';
 import { requireUser } from './auth';
@@ -10,6 +11,7 @@ import { assertWorkspaceAccess } from './permissions';
 import { getCalendarItems, type CalendarItem } from './calendar';
 import { listRecentNotes } from './notes';
 import { listActivities, type ActivityWithUser } from './activity';
+import { listFollowUps, type FollowUpWithMeta } from './followUps';
 
 export interface DashboardStats {
     totalLeads: number;
@@ -17,10 +19,17 @@ export interface DashboardStats {
     qualifiedLeads: number;
     inProgressLeads: number;
     convertedLeads: number;
+    learners: number;
+    activatedLearners: number;
+    feedbackReceived: number;
+    institutions: number;
     pendingTasks: number;
     overdueTasks: number;
     upcomingDeadlines: number;
     myOpenTasks: number;
+    pendingFollowUps: number;
+    overdueFollowUps: number;
+    activeProjects: number;
 }
 
 export interface DashboardLead extends Lead {
@@ -32,10 +41,18 @@ export interface DashboardTask extends Task {
     assigneeName?: string;
 }
 
+export interface DashboardProject extends Project {
+    ownerName: string;
+    ownerColor: string;
+}
+
 export interface DashboardData {
     stats: DashboardStats;
     recentLeads: DashboardLead[];
+    learnerActivity: DashboardLead[];
     myTasks: DashboardTask[];
+    myFollowUps: FollowUpWithMeta[];
+    projects: DashboardProject[];
     upcoming: CalendarItem[];
     recentNotes: Note[];
     activity: ActivityWithUser[];
@@ -50,19 +67,23 @@ export async function getDashboardData(workspaceId: string, userId: string): Pro
     const actor = await requireUser();
     await assertWorkspaceAccess(actor, workspaceId);
 
-    const [leads, stages, tasks, users] = await Promise.all([
+    const [leads, stages, tasks, users, workspaceProjects, followUps] = await Promise.all([
         db.leads.where('workspaceId').equals(workspaceId).toArray(),
         db.leadStages.where('workspaceId').equals(workspaceId).sortBy('order'),
         db.tasks.where('workspaceId').equals(workspaceId).toArray(),
         db.users.toArray(),
+        db.projects.where('workspaceId').equals(workspaceId).toArray(),
+        listFollowUps(workspaceId, { status: 'pending', limit: 50 }),
     ]);
 
     const activeLeads = leads.filter(l => !l.archived);
     const userMap = new Map(users.map(u => [u.id, u]));
     const stageMap = new Map(stages.map(s => [s.id, s]));
 
-    const newStageIds = new Set(stages.filter(s => s.name.trim().toLowerCase() === 'new' || s.order === 0).map(s => s.id));
-    const qualifiedStageIds = new Set(stages.filter(s => s.name.trim().toLowerCase() === 'qualified').map(s => s.id));
+    const activeLearners = activeLeads.filter(l => (l.audience || 'learner') === 'learner');
+    const activeInstitutions = activeLeads.filter(l => l.audience === 'institution');
+    const newStageIds = new Set(stages.filter(s => s.order === 0).map(s => s.id));
+    const engagedStageIds = new Set(stages.filter(s => s.name.trim().toLowerCase() === 'engaged').map(s => s.id));
     const wonStageIds = new Set(stages.filter(s => s.isWon === 1).map(s => s.id));
     const lostStageIds = new Set(stages.filter(s => s.isLost === 1).map(s => s.id));
 
@@ -86,18 +107,49 @@ export async function getDashboardData(workspaceId: string, userId: string): Pro
     const stats: DashboardStats = {
         totalLeads: activeLeads.length,
         newLeads: activeLeads.filter(l => newStageIds.has(l.stageId)).length,
-        qualifiedLeads: activeLeads.filter(l => qualifiedStageIds.has(l.stageId)).length,
+        qualifiedLeads: activeLeads.filter(l => engagedStageIds.has(l.stageId)).length,
         inProgressLeads: activeLeads.filter(l => !newStageIds.has(l.stageId) && !wonStageIds.has(l.stageId) && !lostStageIds.has(l.stageId)).length,
         convertedLeads: activeLeads.filter(l => wonStageIds.has(l.stageId)).length,
+        learners: activeLearners.length,
+        activatedLearners: activeLearners.filter(l => !!l.firstChallengeAt || (l.challengeAttempts || 0) > 0 || l.feedbackStatus === 'submitted').length,
+        feedbackReceived: activeLearners.filter(l => l.feedbackStatus === 'submitted').length,
+        institutions: activeInstitutions.length,
         pendingTasks: pendingTasks.length,
         overdueTasks: overdue.length,
         upcomingDeadlines: upcomingTaskCount + upcomingFollowUps,
         myOpenTasks: pendingTasks.filter(t => t.assigneeId === userId).length,
+        pendingFollowUps: followUps.length,
+        overdueFollowUps: followUps.filter(item => item.overdue).length,
+        activeProjects: workspaceProjects.filter(project => !project.archived && project.status !== 'completed' && project.status !== 'cancelled').length,
     };
+
+    const activeProjects: DashboardProject[] = workspaceProjects
+        .filter(project => !project.archived && project.status !== 'completed' && project.status !== 'cancelled')
+        .sort((a, b) => b.updatedAt - a.updatedAt)
+        .slice(0, 4)
+        .map(project => ({
+            ...project,
+            ownerName: userMap.get(project.ownerId)?.name || 'Unassigned',
+            ownerColor: userMap.get(project.ownerId)?.avatarColor || '#8e8e93',
+        }));
+
+    const myFollowUps = followUps
+        .filter(item => item.assignedTo === userId)
+        .sort((a, b) => Number(b.overdue) - Number(a.overdue) || a.dueAt - b.dueAt)
+        .slice(0, 5);
 
     const recentLeads = activeLeads
         .sort((a, b) => b.createdAt - a.createdAt)
         .slice(0, 5)
+        .map(lead => ({
+            ...lead,
+            stage: stageMap.get(lead.stageId),
+            ownerName: userMap.get(lead.ownerId)?.name || 'Unassigned',
+        }));
+
+    const learnerActivity = activeLearners
+        .sort((a, b) => (b.lastActiveAt || b.updatedAt) - (a.lastActiveAt || a.updatedAt))
+        .slice(0, 6)
         .map(lead => ({
             ...lead,
             stage: stageMap.get(lead.stageId),
@@ -128,5 +180,5 @@ export async function getDashboardData(workspaceId: string, userId: string): Pro
         listActivities(workspaceId, 8),
     ]);
 
-    return { stats, recentLeads, myTasks, upcoming, recentNotes, activity };
+    return { stats, recentLeads, learnerActivity, myTasks, myFollowUps, projects: activeProjects, upcoming, recentNotes, activity };
 }

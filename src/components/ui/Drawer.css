@@ -1,0 +1,122 @@
+.ws-drawer-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 9000;
+    display: flex;
+    justify-content: flex-end;
+    font-family: var(--font-sans);
+}
+
+.ws-drawer-backdrop {
+    position: absolute;
+    inset: 0;
+    border: 0;
+    background: rgba(0, 0, 0, 0.24);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    cursor: default;
+    animation: ws-drawer-fade 0.16s ease-out;
+}
+
+.ws-drawer-panel {
+    position: relative;
+    width: min(620px, 92vw);
+    height: 100%;
+    margin-left: auto;
+    background: var(--surface-low);
+    border-left: 1px solid var(--border-subtle);
+    box-shadow: -24px 0 60px rgba(0, 0, 0, 0.13);
+    outline: none;
+    overflow: hidden;
+    animation: ws-drawer-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.ws-drawer-panel > .ws-module {
+    height: 100%;
+    background: var(--surface-low);
+}
+
+.ws-drawer-panel .ws-module-inner {
+    max-width: none;
+    padding: 22px 26px 48px;
+}
+
+.ws-drawer-panel .ws-detail-head {
+    align-items: flex-start;
+    padding-bottom: 16px;
+    margin-bottom: 18px;
+}
+
+.ws-drawer-panel .ws-detail-title {
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.ws-drawer-panel .ws-detail-title h1 {
+    font-size: 21px;
+}
+
+.ws-drawer-panel .ws-detail-title .ws-avatar {
+    width: 36px !important;
+    height: 36px !important;
+    margin-top: 2px;
+}
+
+.ws-drawer-panel .ws-detail-actions {
+    gap: 6px;
+}
+
+.ws-drawer-panel .ws-detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+}
+
+.ws-drawer-panel .ws-detail-side {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.ws-drawer-panel .ws-detail-side::before {
+    content: '';
+    grid-column: 1 / -1;
+    height: 1px;
+    background: var(--border-subtle);
+}
+
+.ws-drawer-panel .ws-card-padded {
+    padding: 16px;
+}
+
+.ws-drawer-panel .ws-card-header {
+    margin-bottom: 12px;
+}
+
+.ws-drawer-panel .ws-meta-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ws-drawer-panel .ws-empty {
+    padding: 24px 14px;
+}
+
+@keyframes ws-drawer-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes ws-drawer-in {
+    from { opacity: 0; transform: translateX(22px); }
+    to { opacity: 1; transform: none; }
+}
+
+@media (max-width: 640px) {
+    .ws-drawer-panel { width: 100%; }
+    .ws-drawer-panel .ws-module-inner { padding: 18px 16px 40px; }
+    .ws-drawer-panel .ws-detail-side { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ws-drawer-backdrop,
+    .ws-drawer-panel { animation: none; }
+}

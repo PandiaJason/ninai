@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import type { Lead, Priority, Task, TaskStatus } from '../../db';
+import type { Lead, Priority, Project, Task, TaskStatus } from '../../db';
 import { createTask, updateTask, TASK_STATUSES, TASK_STATUS_LABEL } from '../../services/tasks';
 import { listLeads } from '../../services/leads';
+import { listProjects } from '../../services/projects';
 import { getTagsForEntity, getTagSuggestions } from '../../services/tags';
 import type { WorkspaceUser } from '../../services/workspace';
 import { PRIORITIES, PRIORITY_LABEL } from '../../services/validation';
@@ -18,6 +19,7 @@ interface TaskFormProps {
     members: WorkspaceUser[];
     task?: Task | null;
     initialLeadId?: string;
+    initialProjectId?: string;
     initialStatus?: TaskStatus;
     onClose: () => void;
     onSaved: (task: Task) => void;
@@ -27,6 +29,7 @@ interface FormState {
     title: string;
     description: string;
     leadId: string;
+    projectId: string;
     assigneeId: string;
     priority: Priority;
     status: TaskStatus;
@@ -42,13 +45,15 @@ export const TaskForm: React.FC<TaskFormProps> = ({
     members,
     task,
     initialLeadId,
+    initialProjectId,
     initialStatus,
     onClose,
     onSaved,
 }) => {
     const toast = useToast();
-    const [form, setForm] = useState<FormState>(() => emptyForm(currentUserId, initialLeadId, initialStatus));
+    const [form, setForm] = useState<FormState>(() => emptyForm(currentUserId, initialLeadId, initialProjectId, initialStatus));
     const [leads, setLeads] = useState<Lead[]>([]);
+    const [projects, setProjects] = useState<Project[]>([]);
     const [suggestions, setSuggestions] = useState<string[]>([]);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -58,16 +63,18 @@ export const TaskForm: React.FC<TaskFormProps> = ({
         if (!open) return;
         let cancelled = false;
         setError('');
-        setForm(emptyForm(currentUserId, initialLeadId, initialStatus));
+        setForm(emptyForm(currentUserId, initialLeadId, initialProjectId, initialStatus));
         setLoading(true);
 
         (async () => {
-            const [workspaceLeads, tagSuggestions] = await Promise.all([
+            const [workspaceLeads, workspaceProjects, tagSuggestions] = await Promise.all([
                 listLeads(workspaceId),
+                listProjects(workspaceId),
                 getTagSuggestions(workspaceId),
             ]);
             if (cancelled) return;
             setLeads(workspaceLeads);
+            setProjects(workspaceProjects);
             setSuggestions(tagSuggestions);
 
             if (task) {
@@ -77,6 +84,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({
                     title: task.title,
                     description: task.description || '',
                     leadId: task.leadId || '',
+                    projectId: task.projectId || '',
                     assigneeId: task.assigneeId || '',
                     priority: task.priority,
                     status: task.status,
@@ -90,7 +98,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({
             .finally(() => { if (!cancelled) setLoading(false); });
 
         return () => { cancelled = true; };
-    }, [open, task, workspaceId, currentUserId, initialLeadId, initialStatus]);
+    }, [open, task, workspaceId, currentUserId, initialLeadId, initialProjectId, initialStatus]);
 
     const set = <K extends keyof FormState>(key: K, value: FormState[K]) => setForm(prev => ({ ...prev, [key]: value }));
 
@@ -103,6 +111,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({
                 title: form.title,
                 description: form.description,
                 leadId: form.leadId || null,
+                projectId: form.projectId || null,
                 assigneeId: form.assigneeId || null,
                 priority: form.priority,
                 status: form.status,
@@ -156,6 +165,12 @@ export const TaskForm: React.FC<TaskFormProps> = ({
                                 {leads.map(lead => <option key={lead.id} value={lead.id}>{lead.name}{lead.company ? ` · ${lead.company}` : ''}</option>)}
                             </Select>
                         </Field>
+                        <Field label="Project" htmlFor="task-project">
+                            <Select id="task-project" value={form.projectId} onChange={e => set('projectId', e.target.value)}>
+                                <option value="">No project</option>
+                                {projects.map(project => <option key={project.id} value={project.id}>{project.name} · {project.identifier}</option>)}
+                            </Select>
+                        </Field>
                         <Field label="Assignee" htmlFor="task-assignee">
                             <UserSelect
                                 id="task-assignee"
@@ -194,12 +209,14 @@ export const TaskForm: React.FC<TaskFormProps> = ({
 function emptyForm(
     currentUserId: string,
     initialLeadId?: string,
+    initialProjectId?: string,
     initialStatus?: TaskStatus,
 ): FormState {
     return {
         title: '',
         description: '',
         leadId: initialLeadId || '',
+        projectId: initialProjectId || '',
         assigneeId: currentUserId,
         priority: 'medium',
         status: initialStatus || 'todo',

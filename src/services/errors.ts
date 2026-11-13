@@ -4,6 +4,8 @@ export type AppErrorCode =
     | 'NOT_FOUND'
     | 'CONFLICT'
     | 'AUTH'
+    | 'NETWORK'
+    | 'API'
     | 'UNKNOWN';
 
 export class AppError extends Error {

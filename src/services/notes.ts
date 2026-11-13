@@ -8,6 +8,7 @@ import {
     type NoteLink,
     type Task,
 } from '../db';
+import { apiRequest } from './api';
 import { requireUser } from './auth';
 import { AppError } from './errors';
 import { assertWorkspaceAccess } from './permissions';
@@ -110,6 +111,13 @@ export async function deleteNoteCascade(noteId: string): Promise<void> {
     const note = await db.notes.get(noteId);
     if (!note) return;
     await assertWorkspaceAccess(actor, note.workspaceId || DEFAULT_WORKSPACE_ID);
+
+    try {
+        await apiRequest(`/notes/${noteId}`, { method: 'DELETE' });
+    } catch {
+        // Safe fallback if not a cloud note
+    }
+
     await db.transaction('rw', [db.notes, db.noteLinks, db.recordTags, db.activities], async () => {
         await db.notes.delete(noteId);
         await db.noteLinks.where('noteId').equals(noteId).delete();
@@ -148,6 +156,9 @@ async function assertEntity(workspaceId: string, entityType: EntityType, entityI
     if (entityType === 'lead') {
         const lead = await db.leads.get(entityId);
         if (!lead || lead.workspaceId !== workspaceId) throw new AppError('NOT_FOUND', 'Lead not found.');
+    } else if (entityType === 'project') {
+        const project = await db.projects.get(entityId);
+        if (!project || project.workspaceId !== workspaceId) throw new AppError('NOT_FOUND', 'Project not found.');
     } else if (entityType === 'task') {
         const task = await db.tasks.get(entityId);
         if (!task || task.workspaceId !== workspaceId) throw new AppError('NOT_FOUND', 'Task not found.');
@@ -273,6 +284,18 @@ export async function createNoteForEntity(
         content: '',
     });
     await linkNote(workspaceId, note.id, entityType, entityId);
+
+    if (entityType === 'lead') {
+        try {
+            await apiRequest(`/leads/${entityId}/notes`, {
+                method: 'POST',
+                body: JSON.stringify({ id: note.id, body: note.title || 'Untitled Note' }),
+            });
+        } catch (e: any) {
+            console.warn('Backend create lead note fallback:', e.message);
+        }
+    }
+
     return note;
 }
 

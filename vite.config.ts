@@ -8,6 +8,12 @@ export default defineConfig({
     strictPort: true,
     watch: {
       ignored: ['**/release/**']
+    },
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      }
     }
   },
   base: './',

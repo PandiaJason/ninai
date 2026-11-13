@@ -2,11 +2,12 @@ import {
     db,
     DEFAULT_ADMIN_EMAIL,
     DEFAULT_ADMIN_PASSWORD,
-    DEFAULT_STAGES,
     DEFAULT_WORKSPACE_ID,
     type User,
     type UserRole,
 } from '../db';
+import { apiRequest, clearAuthToken, getAuthToken, setAuthToken } from './api';
+import { ensureAlgoPipelines } from './algo';
 import { AppError } from './errors';
 import { colorFor, email as validateEmail, required } from './validation';
 
@@ -78,13 +79,7 @@ async function seedDefaultAdmin(): Promise<void> {
 }
 
 async function seedStages(workspaceId: string): Promise<void> {
-    const count = await db.leadStages.where('workspaceId').equals(workspaceId).count();
-    if (count > 0) return;
-    await db.leadStages.bulkAdd(DEFAULT_STAGES.map(stage => ({
-        ...stage,
-        id: workspaceId === DEFAULT_WORKSPACE_ID ? stage.id : `${stage.id}_${workspaceId}`,
-        workspaceId,
-    })));
+    await ensureAlgoPipelines(workspaceId);
 }
 
 async function doSeed(): Promise<void> {
@@ -134,23 +129,64 @@ export function ensureSeedData(): Promise<void> {
 }
 
 export async function login(email: string, password: string): Promise<SessionUser> {
-    await ensureSeedData();
     const normalized = email.trim().toLowerCase();
     if (!normalized || !password) throw new AppError('AUTH', 'Enter your email and password.');
 
-    const user = await db.users.where('email').equals(normalized).first();
-    if (!user || user.active !== 1) throw new AppError('AUTH', 'Invalid email or password.');
+    try {
+        // Authenticate against Backend PostgreSQL API
+        const data = await apiRequest<{ user: { id: string; name: string; email: string }; token: string }>('/auth/login', {
+            method: 'POST',
+            body: JSON.stringify({ email: normalized, password }),
+        });
 
-    const valid = await verifyPassword(password, user);
-    if (!valid) throw new AppError('AUTH', 'Invalid email or password.');
+        setAuthToken(data.token);
 
-    const now = Date.now();
-    await db.users.update(user.id, { lastLoginAt: now });
-    localStorage.setItem(SESSION_KEY, user.id);
-    return publicUser({ ...user, lastLoginAt: now });
+        const now = Date.now();
+        const sessionUser: SessionUser = {
+            id: data.user.id,
+            name: data.user.name,
+            email: data.user.email,
+            role: 'admin',
+            workspaceId: DEFAULT_WORKSPACE_ID,
+            avatarColor: colorFor(data.user.name),
+            active: 1,
+            createdAt: now,
+            updatedAt: now,
+            lastLoginAt: now,
+        };
+
+        // Cache in Dexie for offline lookup and relationship consistency
+        await db.users.put({
+            ...sessionUser,
+            passwordHash: '',
+            passwordSalt: '',
+        });
+
+        localStorage.setItem(SESSION_KEY, data.user.id);
+        return sessionUser;
+    } catch (apiErr: any) {
+        // If the error was explicitly invalid credentials from the server, throw it directly
+        if (apiErr.code === 'AUTH' || apiErr.code === 'VALIDATION' || apiErr.code === 'API') {
+            throw apiErr;
+        }
+
+        // Fallback for offline local dev mode if server is not reachable
+        await ensureSeedData();
+        const localUser = await db.users.where('email').equals(normalized).first();
+        if (!localUser || localUser.active !== 1) throw new AppError('AUTH', 'Invalid email or password.');
+
+        const valid = await verifyPassword(password, localUser);
+        if (!valid) throw new AppError('AUTH', 'Invalid email or password.');
+
+        const now = Date.now();
+        await db.users.update(localUser.id, { lastLoginAt: now });
+        localStorage.setItem(SESSION_KEY, localUser.id);
+        return publicUser({ ...localUser, lastLoginAt: now });
+    }
 }
 
 export function logout(): void {
+    clearAuthToken();
     localStorage.removeItem(SESSION_KEY);
 }
 
@@ -159,9 +195,43 @@ export function getSessionUserId(): string | null {
 }
 
 export async function getCurrentUser(): Promise<SessionUser | null> {
-    const id = getSessionUserId();
-    if (!id) return null;
-    const user = await db.users.get(id);
+    const token = getAuthToken();
+    const storedId = getSessionUserId();
+
+    if (token) {
+        try {
+            const data = await apiRequest<{ user: { id: string; name: string; email: string } }>('/auth/me');
+            if (data?.user) {
+                const now = Date.now();
+                const sessionUser: SessionUser = {
+                    id: data.user.id,
+                    name: data.user.name,
+                    email: data.user.email,
+                    role: 'admin',
+                    workspaceId: DEFAULT_WORKSPACE_ID,
+                    avatarColor: colorFor(data.user.name),
+                    active: 1,
+                    createdAt: now,
+                    updatedAt: now,
+                    lastLoginAt: now,
+                };
+                await db.users.put({
+                    ...sessionUser,
+                    passwordHash: '',
+                    passwordSalt: '',
+                });
+                return sessionUser;
+            }
+        } catch {
+            // Token expired or invalid
+            clearAuthToken();
+            localStorage.removeItem(SESSION_KEY);
+            return null;
+        }
+    }
+
+    if (!storedId) return null;
+    const user = await db.users.get(storedId);
     if (!user || user.active !== 1) {
         localStorage.removeItem(SESSION_KEY);
         return null;

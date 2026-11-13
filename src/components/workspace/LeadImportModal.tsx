@@ -10,7 +10,8 @@ import { useToast } from '../ui/Toast';
 
 const TARGET_FIELDS = [
     { key: 'name', label: 'Lead name', required: true },
-    { key: 'company', label: 'Company' },
+    { key: 'audience', label: 'Audience (learner or institution)' },
+    { key: 'company', label: 'Company / institution' },
     { key: 'email', label: 'Email' },
     { key: 'phone', label: 'Phone' },
     { key: 'website', label: 'Website' },
@@ -19,8 +20,17 @@ const TARGET_FIELDS = [
     { key: 'priority', label: 'Priority' },
     { key: 'value', label: 'Deal value' },
     { key: 'source', label: 'Source' },
+    { key: 'sourceDetail', label: 'Source detail' },
+    { key: 'persona', label: 'Persona' },
+    { key: 'quality', label: 'Lead quality' },
     { key: 'industry', label: 'Industry' },
     { key: 'location', label: 'Location' },
+    { key: 'institutionType', label: 'Institution type' },
+    { key: 'studentCount', label: 'Student count' },
+    { key: 'attempts', label: 'Challenge attempts' },
+    { key: 'firstChallenge', label: 'First challenge' },
+    { key: 'tracks', label: 'Tracks explored' },
+    { key: 'dropOffReason', label: 'Drop-off reason' },
     { key: 'owner', label: 'Owner (email or name)' },
     { key: 'description', label: 'Description' },
     { key: 'tags', label: 'Tags' },
@@ -130,8 +140,8 @@ export const LeadImportModal: React.FC<LeadImportModalProps> = ({ open, workspac
 
     const sample = () => {
         const csv = toCsv(
-            ['Lead Name', 'Company', 'Email', 'Phone', 'Stage', 'Priority', 'Deal Value', 'Owner Email', 'Tags', 'Description'],
-            [['Ada Lovelace', 'Analytical Engines', 'ada@example.com', '+1 555 0100', 'New', 'high', '25000', 'admin@ninai.app', 'referral; enterprise', 'Interested in the Q3 rollout.']],
+            ['Lead Name', 'Audience', 'Company', 'Email', 'Phone', 'Stage', 'Priority', 'Source', 'Source Detail', 'Persona', 'Quality', 'Challenge Attempts', 'Tracks', 'Owner Email', 'Tags', 'Description'],
+            [['Ada Lovelace', 'learner', 'Analytical Engines', 'ada@example.com', '+1 555 0100', 'Requested', 'high', 'LinkedIn', 'FDE launch post', 'Final-year student', 'Genuine FDE intent', '2', 'Unix Shell; HTTP & APIs', 'admin@ninai.app', 'first-cohort', 'Asked about the systems track after the launch post.']],
         );
         downloadCsv('ninai_leads_template.csv', csv);
     };
@@ -219,18 +229,20 @@ export const LeadImportModal: React.FC<LeadImportModalProps> = ({ open, workspac
                                     <table className="ws-table" style={{ minWidth: 700 }}>
                                         <thead>
                                             <tr>
-                                                <th>Name</th><th>Company</th><th>Email</th><th>Phone</th><th>Stage</th><th>Value</th><th>Owner</th>
+                                                <th>Name</th><th>Audience</th><th>Company</th><th>Email</th><th>Stage</th><th>Source</th><th>Quality</th><th>Attempts</th><th>Owner</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {preview.map((row, index) => (
                                                 <tr key={index} style={{ cursor: 'default' }}>
                                                     <td className="cell-title">{row.name || '—'}</td>
+                                                    <td>{row.audience || 'learner'}</td>
                                                     <td>{row.company || '—'}</td>
                                                     <td>{row.email || '—'}</td>
-                                                    <td>{row.phone || '—'}</td>
                                                     <td>{row.stage || 'Default'}</td>
-                                                    <td>{row.value || '0'}</td>
+                                                    <td>{row.source || '—'}</td>
+                                                    <td>{row.quality || '—'}</td>
+                                                    <td>{row.attempts || '0'}</td>
                                                     <td>{row.owner || 'You'}</td>
                                                 </tr>
                                             ))}

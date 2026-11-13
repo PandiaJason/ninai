@@ -29,6 +29,7 @@ import { useAuth } from '../../context/AuthContext';
 import { PriorityBadge, TaskStatusBadge } from './shared';
 import { useAsyncData } from './useAsyncData';
 import { EntityNotes } from './EntityNotes';
+import { EntityFollowUps } from './EntityFollowUps';
 import { TaskForm } from './TaskForm';
 
 interface TaskDetailModalProps {
@@ -216,6 +217,14 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, worksp
                                     <Button type="submit" size="sm" variant="primary" icon="send" disabled={!comment.trim()}>Post</Button>
                                 </form>
                             </SectionCard>
+
+                            <EntityFollowUps
+                                workspaceId={workspaceId}
+                                entityType="task"
+                                entityId={task.id}
+                                entityLabel={task.title}
+                                onChanged={() => void reload()}
+                            />
 
                             <EntityNotes workspaceId={workspaceId} entityType="task" entityId={task.id} nav={nav} />
                         </div>
