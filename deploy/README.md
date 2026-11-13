@@ -37,6 +37,11 @@ sudo install -d -m 750 /etc/ninai
 sudo install -m 600 /dev/null /etc/ninai/api.env
 sudo nano /etc/ninai/api.env     # DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, JWT_SECRET, PORT
 
+# 4b. the RDS certificate bundle, so the database link is verified
+curl -o /etc/ninai/global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+# then add this line to /etc/ninai/api.env:
+#   DB_SSL_CA=/etc/ninai/global-bundle.pem
+
 # 5. systemd
 sudo cp /opt/ninai/deploy/ninai-api.service /etc/systemd/system/
 sudo systemctl daemon-reload
