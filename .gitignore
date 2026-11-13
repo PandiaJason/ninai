@@ -4,6 +4,13 @@
 .env.production
 .env.development
 
+# Keys and cloud credentials (never commit these)
+*.pem
+*.ppk
+*.key
+.aws/
+aws-credentials*
+
 # Logs
 logs
 *.log

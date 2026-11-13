@@ -2,11 +2,43 @@ import { AppError } from './errors';
 import type { Lead, LeadAudience, LeadQuality, LearnerPersona, Priority } from '../db';
 
 const TOKEN_KEY = 'ninai_auth_token';
+const API_BASE_KEY = 'ninai_api_base';
 
-// Base API URL supports both Vite dev proxy (/api) and direct host in Electron/preview
-const API_BASE = (typeof window !== 'undefined' && window.location.port === '5173')
-  ? '/api'
-  : 'http://localhost:3001/api';
+/**
+ * Where the shared API lives.
+ *
+ * Order of precedence:
+ *   1. the URL saved in Settings (per device, so each person can point at the
+ *      server their team uses)
+ *   2. VITE_API_BASE, baked in at build time
+ *   3. the Vite dev proxy on port 5173
+ *   4. a local API on this machine
+ */
+export function getApiBase(): string {
+  try {
+    const stored = localStorage.getItem(API_BASE_KEY);
+    if (stored && stored.trim()) return normalizeBase(stored);
+  } catch {
+    /* localStorage unavailable */
+  }
+  const env = (import.meta as any).env?.VITE_API_BASE;
+  if (env && String(env).trim()) return normalizeBase(String(env));
+  if (typeof window !== 'undefined' && window.location.port === '5173') return '/api';
+  return 'http://localhost:3001/api';
+}
+
+function normalizeBase(value: string): string {
+  let url = value.trim().replace(/\/+$/, '');
+  if (!url) return url;
+  if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
+  return url;
+}
+
+export function setApiBase(value: string): void {
+  const url = value.trim();
+  if (!url) localStorage.removeItem(API_BASE_KEY);
+  else localStorage.setItem(API_BASE_KEY, normalizeBase(url));
+}
 
 export function getAuthToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
@@ -18,6 +50,25 @@ export function setAuthToken(token: string): void {
 
 export function clearAuthToken(): void {
   localStorage.removeItem(TOKEN_KEY);
+}
+
+export interface ApiHealth {
+  status: string;
+  database: string;
+  timestamp?: string;
+  uptime?: number;
+}
+
+/** Checks that the API is reachable and reports whether it can reach the database. */
+export async function fetchApiHealth(base = getApiBase()): Promise<ApiHealth> {
+  const response = await fetch(`${base.replace(/\/+$/, '')}/health`, {
+    headers: getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {},
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new AppError('API', data?.error || `Health check failed (${response.status}).`);
+  }
+  return data as ApiHealth;
 }
 
 export async function apiRequest<T = any>(
@@ -32,7 +83,7 @@ export async function apiRequest<T = any>(
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const url = `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`;
+  const url = `${getApiBase()}${path.startsWith('/') ? path : `/${path}`}`;
 
   let response: Response;
   try {

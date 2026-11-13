@@ -1,0 +1,24 @@
+# NINAI API — TLS front end.
+#
+# Replace api.example.com with the real hostname before enabling.
+# Caddy fetches and renews the certificate automatically.
+
+api.example.com {
+    encode zstd gzip
+
+    # The API itself only listens on the loopback interface.
+    reverse_proxy 127.0.0.1:3001
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "no-referrer"
+        -Server
+    }
+
+    log {
+        output file /var/log/caddy/ninai-api.log
+        format json
+    }
+}

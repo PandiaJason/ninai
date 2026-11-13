@@ -811,6 +811,39 @@
 .ws-auth-hint code { background: rgba(0,0,0,0.06); border-radius: 4px; padding: 1px 4px; font-size: 10.5px; }
 .ws-auth-footnote { display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 10px; color: var(--text-tertiary); margin-top: 6px; }
 
+.ws-auth-server-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    width: 100%;
+    padding: 5px 8px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-tertiary);
+    font-family: var(--font-sans);
+    font-size: 10.5px;
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ws-auth-server-link:hover { background: rgba(0, 0, 0, 0.04); color: var(--text-secondary); }
+
+.ws-auth-server-input {
+    width: 100%;
+    height: 32px;
+    padding: 0 9px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background: var(--surface-low);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 12px;
+}
+
 /* Sidebar module nav ------------------------------------------------------- */
 
 .sidebar-modules { display: flex; flex-direction: column; gap: 5px; width: 100%; align-items: center; }

@@ -13,11 +13,13 @@
     "migrate": "node scripts/migrate.js --dry-run",
     "migrate:apply": "node scripts/migrate.js --apply",
     "dev": "vite",
+    "dev:team": "cross-env VITE_API_BASE=https://api.15-207-248-214.sslip.io/api vite",
     "desktop": "concurrently \"npm run dev\" \"wait-on tcp:5173 && cross-env ELECTRON_RENDERER_URL=http://localhost:5173 electron .\"",
     "start:all": "concurrently \"npm run server\" \"npm run dev\"",
     "build": "tsc -b && vite build",
     "dist": "npm run build && electron-builder",
     "dist:all": "npm run build && electron-builder -mwl",
+    "dist:team": "cross-env VITE_API_BASE=https://api.15-207-248-214.sslip.io/api npm run build && electron-builder --win --x64 --publish never",
     "lint": "eslint .",
     "preview": "vite preview"
   },

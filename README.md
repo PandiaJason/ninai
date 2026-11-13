@@ -20,9 +20,13 @@
 
 ---
 
-## ALGO CRM — Cloud PostgreSQL Backend
+## ALGO CRM - Cloud PostgreSQL Backend
 
 Ninai includes a built-in CRM backed by AWS RDS PostgreSQL, accessed through a lightweight local Express API. Leads, notes, founder messages, and user authentication are all cloud-persisted. Local Dexie storage is used only for notes, projects, tasks, and calendar events.
+
+> **Installing for the team?** See [`docs/INSTALL.md`](docs/INSTALL.md). The packaged app already points at the shared server, so a new install is a download, a drag to Applications, and a sign-in.
+>
+> **Running the API?** It lives on an EC2 instance, sandboxed with nsjail, behind TLS. See [`deploy/README.md`](deploy/README.md) for the setup and [`deploy/RESTORE.md`](deploy/RESTORE.md) for backups and recovery.
 
 ---
 

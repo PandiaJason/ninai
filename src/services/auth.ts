@@ -3,6 +3,7 @@ import {
     DEFAULT_ADMIN_EMAIL,
     DEFAULT_ADMIN_PASSWORD,
     DEFAULT_WORKSPACE_ID,
+    type MemberRole,
     type User,
     type UserRole,
 } from '../db';
@@ -128,13 +129,44 @@ export function ensureSeedData(): Promise<void> {
     return seedPromise;
 }
 
+/**
+ * Links a signed-in cloud account to the local workspace.
+ *
+ * A cloud user has an id from Postgres, so on a fresh device there is no
+ * membership row for them and the workspace would come back empty. This
+ * makes sure the workspace, pipeline and folders exist locally and then
+ * attaches the account with the role the server gave it.
+ */
+async function ensureWorkspaceMembership(user: SessionUser): Promise<void> {
+    await ensureSeedData();
+    const membership = await db.workspaceMembers
+        .where('[workspaceId+userId]')
+        .equals([DEFAULT_WORKSPACE_ID, user.id])
+        .first();
+    if (membership) {
+        // Keep the local role in step with the server.
+        const localRole: MemberRole = user.role === 'admin' ? 'owner' : 'member';
+        if (membership.role !== localRole) {
+            await db.workspaceMembers.update(membership.id, { role: localRole });
+        }
+        return;
+    }
+    await db.workspaceMembers.add({
+        id: crypto.randomUUID(),
+        workspaceId: DEFAULT_WORKSPACE_ID,
+        userId: user.id,
+        role: user.role === 'admin' ? 'owner' : 'member',
+        createdAt: Date.now(),
+    });
+}
+
 export async function login(email: string, password: string): Promise<SessionUser> {
     const normalized = email.trim().toLowerCase();
     if (!normalized || !password) throw new AppError('AUTH', 'Enter your email and password.');
 
     try {
         // Authenticate against Backend PostgreSQL API
-        const data = await apiRequest<{ user: { id: string; name: string; email: string }; token: string }>('/auth/login', {
+        const data = await apiRequest<{ user: { id: string; name: string; email: string; role?: string }; token: string }>('/auth/login', {
             method: 'POST',
             body: JSON.stringify({ email: normalized, password }),
         });
@@ -146,7 +178,9 @@ export async function login(email: string, password: string): Promise<SessionUse
             id: data.user.id,
             name: data.user.name,
             email: data.user.email,
-            role: 'admin',
+            // The server decides the role. Members stay members until an admin
+            // is granted in the workspace, never the other way round.
+            role: data.user.role === 'admin' ? 'admin' : 'member',
             workspaceId: DEFAULT_WORKSPACE_ID,
             avatarColor: colorFor(data.user.name),
             active: 1,
@@ -161,6 +195,8 @@ export async function login(email: string, password: string): Promise<SessionUse
             passwordHash: '',
             passwordSalt: '',
         });
+
+        await ensureWorkspaceMembership(sessionUser);
 
         localStorage.setItem(SESSION_KEY, data.user.id);
         return sessionUser;
@@ -200,14 +236,14 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
 
     if (token) {
         try {
-            const data = await apiRequest<{ user: { id: string; name: string; email: string } }>('/auth/me');
+            const data = await apiRequest<{ user: { id: string; name: string; email: string; role?: string } }>('/auth/me');
             if (data?.user) {
                 const now = Date.now();
                 const sessionUser: SessionUser = {
                     id: data.user.id,
                     name: data.user.name,
                     email: data.user.email,
-                    role: 'admin',
+                    role: data.user.role === 'admin' ? 'admin' : 'member',
                     workspaceId: DEFAULT_WORKSPACE_ID,
                     avatarColor: colorFor(data.user.name),
                     active: 1,
@@ -220,6 +256,7 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
                     passwordHash: '',
                     passwordSalt: '',
                 });
+                await ensureWorkspaceMembership(sessionUser);
                 return sessionUser;
             }
         } catch {

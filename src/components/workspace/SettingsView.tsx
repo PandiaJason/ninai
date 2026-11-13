@@ -30,6 +30,7 @@ import {
     getGmailConnection,
 } from '../../services/gmailSync';
 import { buildGoogleAuthUrl, createPkcePair } from '../../services/gmail';
+import { fetchApiHealth, getApiBase, setApiBase, type ApiHealth } from '../../services/api';
 import {
     downloadCloudBackup,
     getCloudBackupConfig,
@@ -49,7 +50,7 @@ import { Field, Select, TextArea, TextInput } from '../ui/Form';
 import { useToast } from '../ui/Toast';
 import { useAsyncData } from './useAsyncData';
 
-type SettingsSection = 'profile' | 'workspace' | 'people' | 'pipeline' | 'gmail' | 'data' | 'versions';
+type SettingsSection = 'profile' | 'workspace' | 'people' | 'pipeline' | 'gmail' | 'server' | 'data' | 'versions';
 
 const SECTIONS: { id: SettingsSection; label: string; icon: IconName }[] = [
     { id: 'profile', label: 'Profile', icon: 'user' },
@@ -57,6 +58,7 @@ const SECTIONS: { id: SettingsSection; label: string; icon: IconName }[] = [
     { id: 'people', label: 'People', icon: 'users' },
     { id: 'pipeline', label: 'Pipeline', icon: 'kanban' },
     { id: 'gmail', label: 'Gmail', icon: 'mail' },
+    { id: 'server', label: 'Server', icon: 'globe' },
     { id: 'data', label: 'Data', icon: 'file' },
     { id: 'versions', label: 'Versions & backup', icon: 'history' },
 ];
@@ -141,6 +143,10 @@ export const SettingsView: React.FC = () => {
 
                         {section === 'gmail' && workspaceId && (
                             <GmailSection workspaceId={workspaceId} onChanged={() => void reload()} />
+                        )}
+
+                        {section === 'server' && (
+                            <ServerSection />
                         )}
 
                         {section === 'data' && (
@@ -1197,6 +1203,116 @@ const GmailSection: React.FC<{ workspaceId: string; onChanged: () => void }> = (
                     </>
                 )}
                 {error && <div className="ws-form-error" style={{ marginTop: 12 }}>{error}</div>}
+            </SectionCard>
+        </>
+    );
+};
+
+/* ------------------------------------------------------------------ */
+/* Server (shared API)                                                 */
+/* ------------------------------------------------------------------ */
+
+const ServerSection: React.FC = () => {
+    const toast = useToast();
+    const [url, setUrl] = useState(() => getApiBase());
+    const [testing, setTesting] = useState(false);
+    const [health, setHealth] = useState<ApiHealth | null>(null);
+    const [error, setError] = useState('');
+
+    const test = async () => {
+        setTesting(true);
+        setError('');
+        setHealth(null);
+        try {
+            const result = await fetchApiHealth();
+            setHealth(result);
+        } catch (e) {
+            setError(toErrorMessage(e));
+        } finally {
+            setTesting(false);
+        }
+    };
+
+    const save = () => {
+        setApiBase(url);
+        setUrl(getApiBase());
+        setHealth(null);
+        setError('');
+        toast.success('Server address saved on this device.');
+    };
+
+    return (
+        <>
+            <SectionCard
+                title="Shared server"
+                description="The address of the API that holds the shared workspace. Everyone on the team points their app at the same address."
+            >
+                <form
+                    onSubmit={event => { event.preventDefault(); save(); }}
+                    style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}
+                >
+                    <div style={{ flex: '1 1 320px' }}>
+                        <Field
+                            label="API address"
+                            htmlFor="server-url"
+                            hint="https://api.your-domain.com/api"
+                        >
+                            <TextInput
+                                id="server-url"
+                                value={url}
+                                onChange={event => setUrl(event.target.value)}
+                                placeholder="http://localhost:3001/api"
+                            />
+                        </Field>
+                    </div>
+                    <Button type="submit" icon="check">Save</Button>
+                    <Button variant="secondary" icon="refresh" onClick={() => void test()} loading={testing}>
+                        Test connection
+                    </Button>
+                </form>
+
+                <div className="ws-info-list" style={{ marginTop: 14 }}>
+                    <div className="ws-info-row">
+                        <Icon name="lock" size={14} />
+                        <span className="ws-info-label">Transport</span>
+                        <span className="ws-info-value">Use HTTPS for anything that leaves this machine. Plain HTTP only works on localhost.</span>
+                    </div>
+                    <div className="ws-info-row">
+                        <Icon name="users" size={14} />
+                        <span className="ws-info-label">Scope</span>
+                        <span className="ws-info-value">This setting is per device. It never syncs, so each person can point at the server they use.</span>
+                    </div>
+                </div>
+
+                {health && (
+                    <div className="ws-info-list" style={{ marginTop: 12 }}>
+                        <div className="ws-info-row">
+                            <Icon name="globe" size={14} />
+                            <span className="ws-info-label">API</span>
+                            <span className="ws-info-value">{health.status}</span>
+                        </div>
+                        <div className="ws-info-row">
+                            <Icon name={health.database === 'connected' ? 'circle-check' : 'alert'} size={14} />
+                            <span className="ws-info-label">Database</span>
+                            <span className="ws-info-value">
+                                {health.database === 'connected'
+                                    ? 'Connected — sign-in works.'
+                                    : 'The server cannot reach the database. Sign-in will fail until the database is reachable from the server host.'}
+                            </span>
+                        </div>
+                    </div>
+                )}
+
+                {error && <div className="ws-form-error" style={{ marginTop: 12 }}>{error}</div>}
+            </SectionCard>
+
+            <SectionCard title="Where the address comes from" description="Highest priority first.">
+                <div className="ws-info-list">
+                    <div className="ws-info-row"><Icon name="settings" size={14} /><span className="ws-info-label">1. Settings</span><span className="ws-info-value">Saved on this device, wins over everything else.</span></div>
+                    <div className="ws-info-row"><Icon name="file" size={14} /><span className="ws-info-label">2. Build</span><span className="ws-info-value">VITE_API_BASE, baked in when the app is packaged.</span></div>
+                    <div className="ws-info-row"><Icon name="link" size={14} /><span className="ws-info-label">3. Dev proxy</span><span className="ws-info-value">In development, /api is proxied to localhost:3001.</span></div>
+                    <div className="ws-info-row"><Icon name="globe" size={14} /><span className="ws-info-label">4. Fallback</span><span className="ws-info-value">http://localhost:3001/api when nothing else is set.</span></div>
+                </div>
             </SectionCard>
         </>
     );

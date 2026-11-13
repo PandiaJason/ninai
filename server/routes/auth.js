@@ -27,19 +27,33 @@ router.post('/login', loginLimiter, async (req, res) => {
 
   try {
     // Parameterised query verifying pgcrypto blowfish hash: password_hash = crypt($1, password_hash)
-    const sql = `
-      SELECT id, name, email, (password_hash = crypt($1, password_hash)) AS is_valid
-      FROM users
-      WHERE lower(trim(email)) = $2
-      LIMIT 1;
-    `;
-    const result = await query(sql, [password, normalizedEmail]);
+    // The role column is optional until schema_changes.sql has been applied.
+    let user = null;
+    try {
+      const withRole = await query(
+        `SELECT id, name, email, role, (password_hash = crypt($1, password_hash)) AS is_valid
+         FROM users
+         WHERE lower(trim(email)) = $2
+         LIMIT 1;`,
+        [password, normalizedEmail]
+      );
+      user = withRole.rows[0];
+    } catch {
+      const withoutRole = await query(
+        `SELECT id, name, email, (password_hash = crypt($1, password_hash)) AS is_valid
+         FROM users
+         WHERE lower(trim(email)) = $2
+         LIMIT 1;`,
+        [password, normalizedEmail]
+      );
+      user = withoutRole.rows[0];
+    }
 
-    if (result.rows.length === 0 || !result.rows[0].is_valid) {
+    if (!user || !user.is_valid) {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
-    const user = result.rows[0];
+    const role = user.role === 'admin' ? 'admin' : 'member';
 
     // Try updating last_login_at if column exists (failsafe if schema_changes not yet run)
     try {
@@ -55,7 +69,7 @@ router.post('/login', loginLimiter, async (req, res) => {
 
     // Signed token with 24-hour expiration
     const token = jwt.sign(
-      { id: user.id, email: user.email, name: user.name },
+      { id: user.id, email: user.email, name: user.name, role },
       secret,
       { expiresIn: '24h' }
     );
@@ -65,6 +79,7 @@ router.post('/login', loginLimiter, async (req, res) => {
         id: user.id,
         name: user.name,
         email: user.email,
+        role,
       },
       token,
     });
@@ -78,16 +93,31 @@ router.post('/login', loginLimiter, async (req, res) => {
 // GET /api/auth/me - Verify current session
 router.get('/me', authenticateToken, async (req, res) => {
   try {
-    const result = await query(
-      'SELECT id, name, email, created_at FROM users WHERE id = $1 LIMIT 1',
-      [req.user.id]
-    );
+    let row = null;
+    try {
+      const withRole = await query(
+        'SELECT id, name, email, role, created_at FROM users WHERE id = $1 LIMIT 1',
+        [req.user.id]
+      );
+      row = withRole.rows[0];
+    } catch {
+      const withoutRole = await query(
+        'SELECT id, name, email, created_at FROM users WHERE id = $1 LIMIT 1',
+        [req.user.id]
+      );
+      row = withoutRole.rows[0];
+    }
 
-    if (result.rows.length === 0) {
+    if (!row) {
       return res.status(404).json({ error: 'User account not found.' });
     }
 
-    res.json({ user: result.rows[0] });
+    res.json({
+      user: {
+        ...row,
+        role: row.role === 'admin' ? 'admin' : 'member',
+      },
+    });
   } catch (err) {
     console.error('Session verification error');
     res.status(500).json({ error: 'Failed to verify session.' });
