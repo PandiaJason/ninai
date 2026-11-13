@@ -232,6 +232,79 @@
     letter-spacing: -0.02em;
 }
 
+.sidebar-tool-row {
+    position: relative;
+    width: 100%;
+}
+
+.sidebar-tool-row .sidebar-item { padding-right: 32px; }
+
+.sidebar-tool-more {
+    position: absolute;
+    top: 50%;
+    right: 6px;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 120ms ease, background 120ms ease, color 120ms ease;
+}
+
+.sidebar-tool-row:hover .sidebar-tool-more,
+.sidebar-tool-row:focus-within .sidebar-tool-more,
+.sidebar-tool-more:focus-visible { opacity: 1; }
+
+.sidebar-tool-more:hover { background: rgba(0, 0, 0, 0.07); color: var(--text-primary); }
+.sidebar-tool-more:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 1px; }
+
+.sidebar-restore {
+    margin-top: 10px;
+    padding-top: 9px;
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.sidebar-restore-label {
+    padding: 0 2px 4px;
+    color: var(--text-tertiary);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+}
+
+.sidebar-restore-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 5px 4px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: var(--font-sans);
+    font-size: 11.5px;
+    font-weight: 550;
+    text-align: left;
+    cursor: pointer;
+}
+
+.sidebar-restore-item:hover:not(:disabled) { background: rgba(0, 0, 0, 0.045); color: var(--text-primary); }
+.sidebar-restore-item:disabled { opacity: 0.5; cursor: default; }
+.sidebar-restore-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .sidebar-add-site { color: var(--text-tertiary); }
 
 /* Popovers ------------------------------------------------------------------ */

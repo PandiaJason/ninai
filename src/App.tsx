@@ -3,7 +3,7 @@ import { Layout } from './components/Layout';
 import { Sidebar } from './components/Sidebar';
 import { NotesPanel } from './components/NotesPanel';
 import { ToolView } from './components/ToolView';
-import { TOOLS } from './data/tools';
+import { TOOLS, type Tool } from './data/tools';
 
 import { Onboarding } from './components/Onboarding';
 import { LoginScreen } from './components/auth/LoginScreen';
@@ -21,6 +21,7 @@ import { GmailView } from './components/workspace/GmailView';
 import { FounderChannelView } from './components/workspace/FounderChannelView';
 import { countPendingGmailMessages } from './services/gmailSync';
 import { GlobalSearch } from './components/workspace/GlobalSearch';
+import { EmptyState } from './components/ui/Misc';
 import type { ModuleId, WorkspaceNav } from './types/workspace';
 
 const MODULE_IDS: ModuleId[] = ['today', 'dashboard', 'founder', 'crm', 'institutions', 'analytics', 'projects', 'followups', 'tasks', 'notes', 'calendar', 'settings', 'gmail', 'tools'];
@@ -49,8 +50,7 @@ function App() {
         return loaded;
     });
 
-    const [activeToolId, setActiveToolId] = useState(tools[0].id);
-    const activeTool = tools.find((t: any) => t.id === activeToolId) || tools[0];
+    const [activeToolId, setActiveToolId] = useState(tools[0]?.id || '');
 
     useEffect(() => {
         localStorage.setItem('ninai_tools', JSON.stringify(tools));
@@ -72,9 +72,16 @@ function App() {
     const handleDeleteTool = (id: string) => {
         const newTools = tools.filter((t: any) => t.id !== id);
         setTools(newTools);
-        if (activeToolId === id && newTools.length > 0) {
-            setActiveToolId(newTools[0].id);
+        if (activeToolId === id) {
+            setActiveToolId(newTools[0]?.id || '');
         }
+    };
+
+    // Put a default site (ChatGPT, Google, Claude, Gemini) back in the tools rail.
+    const handleRestoreTool = (tool: Tool) => {
+        if (tools.some((t: any) => t.id === tool.id)) return;
+        setTools([...tools, tool]);
+        setActiveToolId(tool.id);
     };
 
     // --- Workspace Navigation ---
@@ -308,10 +315,11 @@ function App() {
             sidebar={
                 <Sidebar
                     tools={tools}
-                    activeToolId={activeTool.id}
+                    activeToolId={activeToolId}
                     onSelectTool={selectTool}
                     onAddTool={handleAddTool}
                     onDeleteTool={handleDeleteTool}
+                    onRestoreTool={handleRestoreTool}
                     activeModule={activeModule}
                     onSelectModule={go}
                     onOpenSearch={() => setSearchOpen(true)}
@@ -344,7 +352,7 @@ function App() {
                     <div
                         key={tool.id}
                         style={{
-                            display: activeTool.id === tool.id ? 'block' : 'none',
+                            display: activeToolId === tool.id ? 'block' : 'none',
                             height: '100%',
                             width: '100%'
                         }}
@@ -358,6 +366,15 @@ function App() {
                         />
                     </div>
                 ))}
+                {tools.length === 0 && (
+                    <div className="ws-module ws-module-inner">
+                        <EmptyState
+                            icon="globe"
+                            title="No sites yet"
+                            description="Add a site from the Tools section of the sidebar to open it beside your workspace."
+                        />
+                    </div>
+                )}
             </div>
 
             {workspaceModule && !notesModule && renderModule()}

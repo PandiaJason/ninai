@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { exportBackup } from '../utils/export';
 import { db } from '../db';
+import { TOOLS, type Tool } from '../data/tools';
 import type { ModuleId } from '../types/workspace';
 import { Icon, type IconName } from './ui/Icon';
+import { ConfirmDialog } from './ui/Misc';
 import './Sidebar.css';
 
 interface SidebarProps {
@@ -17,6 +19,7 @@ interface SidebarProps {
     workspaceName?: string;
     onSignOut?: () => void;
     gmailPending?: number;
+    onRestoreTool?: (tool: Tool) => void;
 }
 
 const PRIMARY_MODULES: { id: ModuleId; label: string; icon: IconName }[] = [
@@ -77,6 +80,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     workspaceName,
     onSignOut,
     gmailPending = 0,
+    onRestoreTool,
 }) => {
     const [userName, setUserName] = useState(() => localStorage.getItem('ninai_username') || 'N');
     const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -84,6 +88,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     const [newName, setNewName] = useState('');
     const [newUrl, setNewUrl] = useState('');
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; toolId: string } | null>(null);
+    const [pendingRemoval, setPendingRemoval] = useState<{ id: string; name: string } | null>(null);
     const profileRef = useRef<HTMLDivElement>(null);
     const addRef = useRef<HTMLDivElement>(null);
 
@@ -124,9 +129,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
         setContextMenu({ x: event.clientX, y: event.clientY, toolId });
     };
 
+    const openToolMenu = (event: React.MouseEvent, toolId: string) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+        setContextMenu({ x: rect.left - 100, y: rect.bottom + 4, toolId });
+    };
+
     const handleDelete = (id: string) => {
-        if (confirm('Remove this site from your tools?')) onDeleteTool(id);
         setContextMenu(null);
+        setPendingRemoval({ id, name: tools.find(tool => tool.id === id)?.name || 'this site' });
+    };
+
+    const confirmRemoval = () => {
+        if (pendingRemoval) onDeleteTool(pendingRemoval.id);
+        setPendingRemoval(null);
     };
 
     const handleAddSubmit = (event: React.FormEvent) => {
@@ -166,6 +183,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     };
 
     const toolIsActive = (id: string) => activeModule === 'tools' && activeToolId === id;
+
+    // Defaults the user removed on this device, offered back in the add-site popover.
+    const removedDefaults = TOOLS.filter(tool => !tools.some(item => item.id === tool.id));
 
     return (
         <nav className="sidebar-nav" aria-label="Main navigation">
@@ -289,24 +309,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         </button>
                     </div>
                     {tools.map(tool => (
-                        <SidebarItem
-                            key={tool.id}
-                            id={tool.id}
-                            label={tool.name}
-                            icon="globe"
-                            active={toolIsActive(tool.id)}
-                            onSelect={() => selectTool(tool.id)}
-                            className="sidebar-tool"
-                        >
-                            <span
-                                className="sidebar-tool-mark"
-                                style={{ color: tool.color, borderColor: `${tool.color}33`, background: `${tool.color}12` }}
-                                onContextMenu={event => handleContextMenu(event, tool.id)}
-                                title={`${tool.name} · right-click to remove`}
+                        <div className="sidebar-tool-row" key={tool.id}>
+                            <SidebarItem
+                                id={tool.id}
+                                label={tool.name}
+                                icon="globe"
+                                active={toolIsActive(tool.id)}
+                                onSelect={() => selectTool(tool.id)}
+                                className="sidebar-tool"
                             >
-                                {tool.label}
-                            </span>
-                        </SidebarItem>
+                                <span
+                                    className="sidebar-tool-mark"
+                                    style={{ color: tool.color, borderColor: `${tool.color}33`, background: `${tool.color}12` }}
+                                    onContextMenu={event => handleContextMenu(event, tool.id)}
+                                    title={`${tool.name} · right-click to remove`}
+                                >
+                                    {tool.label}
+                                </span>
+                            </SidebarItem>
+                            <button
+                                type="button"
+                                className="sidebar-tool-more"
+                                onClick={event => openToolMenu(event, tool.id)}
+                                title={`${tool.name} options`}
+                                aria-label={`${tool.name} options`}
+                                aria-haspopup="menu"
+                            >
+                                <Icon name="more" size={13} />
+                            </button>
+                        </div>
                     ))}
                     <button
                         type="button"
@@ -349,6 +380,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             <button type="submit" className="primary" disabled={!newName.trim() || !newUrl.trim()}>Add site</button>
                         </div>
                     </form>
+
+                    {removedDefaults.length > 0 && (
+                        <div className="sidebar-restore">
+                            <span className="sidebar-restore-label">Removed</span>
+                            {removedDefaults.map(tool => (
+                                <button
+                                    key={tool.id}
+                                    type="button"
+                                    className="sidebar-restore-item"
+                                    onClick={() => onRestoreTool?.(tool)}
+                                    disabled={!onRestoreTool}
+                                >
+                                    <span
+                                        className="sidebar-tool-mark"
+                                        style={{ color: tool.color, borderColor: `${tool.color}33`, background: `${tool.color}12` }}
+                                    >
+                                        {tool.label}
+                                    </span>
+                                    <span className="sidebar-restore-name">{tool.name}</span>
+                                    <Icon name="plus" size={12} />
+                                </button>
+                            ))}
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -361,6 +416,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <button type="button" onClick={() => handleDelete(contextMenu.toolId)}>Remove site</button>
                 </div>
             )}
+
+            <ConfirmDialog
+                open={pendingRemoval !== null}
+                title={`Remove ${pendingRemoval?.name || 'this site'}?`}
+                message="This removes the shortcut from your sidebar on this device only. Nobody else working in this workspace is affected, and you can add it back at any time."
+                confirmLabel="Remove site"
+                danger
+                onConfirm={confirmRemoval}
+                onCancel={() => setPendingRemoval(null)}
+            />
         </nav>
     );
 };
