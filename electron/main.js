@@ -442,7 +442,16 @@ function createWindow() {
     });
 }
 
+// The app draws its own navigation, so the default application menu
+// (File / Edit / View / Window / Help) is hidden. macOS keeps its native menu
+// bar, which also carries Cmd+Q and the standard clipboard shortcuts.
+const HIDE_APPLICATION_MENU = process.platform !== 'darwin';
+
 app.whenReady().then(() => {
+    if (HIDE_APPLICATION_MENU) {
+        Menu.setApplicationMenu(null);
+    }
+
     // CRITICAL: Intercept headers to allow embedding
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
         const responseHeaders = { ...details.responseHeaders };
