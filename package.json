@@ -18,6 +18,7 @@
     "build": "tsc -b && vite build",
     "dist": "npm run build && electron-builder",
     "dist:all": "npm run build && electron-builder -mwl",
+    "dist:team": "cross-env VITE_API_BASE=https://api.15-207-248-214.sslip.io/api npm run build && electron-builder --win --x64 --publish never",
     "lint": "eslint .",
     "preview": "vite preview"
   },

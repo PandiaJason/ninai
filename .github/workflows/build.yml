@@ -33,6 +33,11 @@ jobs:
 
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      # The shared API the packaged app signs in to. Baked into the renderer at
+      # build time, so a fresh install is already pointed at the right server.
+      # Override it in the repository settings (Variables -> VITE_API_BASE) when
+      # the API moves.
+      VITE_API_BASE: ${{ vars.VITE_API_BASE || 'https://api.15-207-248-214.sslip.io/api' }}
 
     steps:
       - name: Check out
