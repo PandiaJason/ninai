@@ -1,3 +1,9 @@
+# Environment and secrets
+.env
+.env*.local
+.env.production
+.env.development
+
 # Logs
 logs
 *.log
@@ -25,3 +31,5 @@ dist-ssr
 
 # Build Output
 release
+
+logs/*.log

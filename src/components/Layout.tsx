@@ -6,26 +6,35 @@ interface LayoutProps {
     children: ReactNode;
     insightPanel: ReactNode;
     zenMode?: boolean;
+    // Full-width notes inside the remaining space, with the sidebar still visible.
+    fullNotes?: boolean;
+    // Notes panel is forced closed (workspace modules that are not notes).
+    notesLocked?: boolean;
+    // Hide the main content area while keeping it mounted.
+    contentHidden?: boolean;
     // Controlled State
-    isSidebarOpen: boolean;
-    setSidebarOpen: (v: boolean) => void;
     isNotesOpen: boolean;
     setNotesOpen: (v: boolean) => void;
 }
 
 export const Layout: React.FC<LayoutProps> = ({
     sidebar, children, insightPanel, zenMode = false,
-    isSidebarOpen, setSidebarOpen, isNotesOpen, setNotesOpen
+    fullNotes = false,
+    notesLocked = false,
+    contentHidden = false,
+    isNotesOpen, setNotesOpen
 }) => {
     // Default to 50% width to match "Split View" expectation
     const [panelWidth, setPanelWidth] = React.useState(() => {
         return window.innerWidth * 0.5;
     });
     const [isResizing, setIsResizing] = React.useState(false);
+    // macOS uses a hidden inset title bar, so the sidebar keeps room for the traffic lights.
+    const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform || navigator.userAgent);
 
-    // Collapsible States (Managed by Parent now)
-    // const [isSidebarOpen, setIsSidebarOpen] = React.useState(true);
-    // const [isNotesOpen, setIsNotesOpen] = React.useState(true);
+    const notesOnly = zenMode || fullNotes;
+    const notesOpen = notesOnly ? true : notesLocked ? false : isNotesOpen;
+    const contentVisible = !zenMode && !fullNotes && !contentHidden;
 
     const animationFrameRef = React.useRef<number | null>(null);
     const panelRef = React.useRef<HTMLElement>(null);
@@ -68,7 +77,7 @@ export const Layout: React.FC<LayoutProps> = ({
 
                         // 2. Update Resizer Position (Right edge)
                         if (resizerRef.current) {
-                            resizerRef.current.style.right = `${newWidth - 6}px`; // Center of 12px
+                            resizerRef.current.style.right = `${newWidth - 6}px`;
                         }
 
                         // 3. Update Toggle Button Position
@@ -103,62 +112,50 @@ export const Layout: React.FC<LayoutProps> = ({
     }, [resize, stopResizing]);
 
     return (
-        <div className={`app-layout ${isResizing ? 'resizing' : ''} ${zenMode ? 'zen-mode' : ''}`}>
+        <div className={`app-layout ${isResizing ? 'resizing' : ''} ${zenMode ? 'zen-mode' : ''} ${isMac ? 'mac-frame' : ''}`}>
             {!zenMode && (
-                <aside className={`layout-sidebar glass ${!isSidebarOpen ? 'collapsed' : ''}`}>
+                <aside className="layout-sidebar glass">
                     {sidebar}
-                    <button
-                        className="sidebar-toggle"
-                        onClick={() => setSidebarOpen(!isSidebarOpen)}
-                        title={isSidebarOpen ? "Collapse Sidebar" : "Expand Sidebar"}
-                    >
-                        {isSidebarOpen ? '«' : '»'}
-                    </button>
                 </aside>
             )}
 
-            <main className={`layout-content ${zenMode ? 'hidden' : ''}`}>
+            <main className={`layout-content ${!contentVisible ? 'hidden' : ''}`}>
                 {children}
-                {!isSidebarOpen && !zenMode && (
-                    <button
-                        className="sidebar-toggle-floating"
-                        onClick={() => setSidebarOpen(true)}
-                    >
-                        »
-                    </button>
-                )}
             </main>
 
             {/* Resizer - Absolute */}
-            {!zenMode && isNotesOpen && (
+            {!notesOnly && !notesLocked && notesOpen && (
                 <div
                     ref={resizerRef}
                     className="resizer"
                     onMouseDown={startResizing}
-                    onDoubleClick={resetWidth} // Feature: Double-click to split equally
-                    style={{ right: panelWidth - 6 }} // Initial pos
+                    onDoubleClick={resetWidth}
+                    style={{ right: panelWidth - 6 }}
                 />
             )}
 
             <aside
                 ref={panelRef}
-                className={`layout-insight-panel glass ${!isNotesOpen ? 'collapsed' : ''} ${zenMode ? 'zen-full' : ''}`}
-                style={{ width: zenMode ? '100%' : (isNotesOpen ? panelWidth : 0) }}
+                className={`layout-insight-panel glass ${!notesOpen ? 'collapsed' : ''} ${zenMode ? 'zen-full' : ''} ${fullNotes ? 'notes-fill' : ''}`}
+                style={{
+                    width: notesOnly ? (fullNotes ? 'auto' : '100%') : (notesOpen ? panelWidth : 0),
+                    flex: fullNotes ? '1 1 auto' : undefined,
+                }}
             >
-                <div style={{ minWidth: zenMode ? '100%' : panelWidth, height: '100%' }}>
+                <div style={{ minWidth: notesOnly ? 0 : panelWidth, height: '100%' }}>
                     {insightPanel}
                 </div>
             </aside>
 
-            {!zenMode && (
+            {!notesOnly && !notesLocked && (
                 <button
                     ref={toggleRef}
-                    className={`notes-toggle ${!isNotesOpen ? 'collapsed' : ''}`}
+                    className={`notes-toggle ${!notesOpen ? 'collapsed' : ''}`}
                     onClick={() => setNotesOpen(!isNotesOpen)}
-                    style={{ right: isNotesOpen ? panelWidth + 10 : 10 }}
-                    title={isNotesOpen ? "Collapse Notes" : "Expand Notes"}
+                    style={{ right: notesOpen ? panelWidth + 10 : 10 }}
+                    title={notesOpen ? "Collapse Notes" : "Expand Notes"}
                 >
-                    {isNotesOpen ? '»' : '«'}
+                    {notesOpen ? '»' : '«'}
                 </button>
             )}
         </div>
