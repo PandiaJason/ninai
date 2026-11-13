@@ -1,0 +1,39 @@
+[Unit]
+Description=NINAI shared API
+Documentation=https://github.com/PandiaJason/ninai
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ninai
+Group=ninai
+WorkingDirectory=/opt/ninai
+EnvironmentFile=/etc/ninai/api.env
+ExecStart=/usr/bin/node server/index.js
+Restart=always
+RestartSec=5
+KillSignal=SIGINT
+TimeoutStopSec=20
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+SystemCallArchitectures=native
+ReadWritePaths=/opt/ninai/logs
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ninai-api
+
+[Install]
+WantedBy=multi-user.target
