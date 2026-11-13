@@ -134,7 +134,7 @@ export async function login(email: string, password: string): Promise<SessionUse
 
     try {
         // Authenticate against Backend PostgreSQL API
-        const data = await apiRequest<{ user: { id: string; name: string; email: string }; token: string }>('/auth/login', {
+        const data = await apiRequest<{ user: { id: string; name: string; email: string; role?: string }; token: string }>('/auth/login', {
             method: 'POST',
             body: JSON.stringify({ email: normalized, password }),
         });
@@ -146,7 +146,9 @@ export async function login(email: string, password: string): Promise<SessionUse
             id: data.user.id,
             name: data.user.name,
             email: data.user.email,
-            role: 'admin',
+            // The server decides the role. Members stay members until an admin
+            // is granted in the workspace, never the other way round.
+            role: data.user.role === 'admin' ? 'admin' : 'member',
             workspaceId: DEFAULT_WORKSPACE_ID,
             avatarColor: colorFor(data.user.name),
             active: 1,
@@ -200,14 +202,14 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
 
     if (token) {
         try {
-            const data = await apiRequest<{ user: { id: string; name: string; email: string } }>('/auth/me');
+            const data = await apiRequest<{ user: { id: string; name: string; email: string; role?: string } }>('/auth/me');
             if (data?.user) {
                 const now = Date.now();
                 const sessionUser: SessionUser = {
                     id: data.user.id,
                     name: data.user.name,
                     email: data.user.email,
-                    role: 'admin',
+                    role: data.user.role === 'admin' ? 'admin' : 'member',
                     workspaceId: DEFAULT_WORKSPACE_ID,
                     avatarColor: colorFor(data.user.name),
                     active: 1,

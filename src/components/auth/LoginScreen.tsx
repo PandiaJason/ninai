@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { hasDefaultAdminPassword } from '../../services/auth';
+import { getApiBase, setApiBase } from '../../services/api';
 import { toErrorMessage } from '../../services/errors';
 import { Button } from '../ui/Misc';
 import { Field, TextInput } from '../ui/Form';
@@ -13,6 +14,8 @@ export const LoginScreen: React.FC = () => {
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [serverOpen, setServerOpen] = useState(false);
+    const [serverUrl, setServerUrl] = useState(() => getApiBase());
     const firstRun = hasDefaultAdminPassword();
 
     const submit = async (e: React.FormEvent) => {
@@ -99,6 +102,39 @@ export const LoginScreen: React.FC = () => {
                             <span>Default admin: <code>admin@ninai.app</code> / <code>ninai-admin</code></span>
                             <span>Change this password in Settings after signing in.</span>
                         </div>
+                    )}
+
+                    {serverOpen ? (
+                        <div className="ws-auth-hint">
+                            <strong>Server address</strong>
+                            <span>The shared API this app signs in to.</span>
+                            <input
+                                className="ws-auth-server-input"
+                                value={serverUrl}
+                                onChange={event => setServerUrl(event.target.value)}
+                                placeholder="http://localhost:3001/api"
+                                aria-label="API address"
+                            />
+                            <div className="sidebar-popover-actions">
+                                <button type="button" onClick={() => setServerOpen(false)}>Cancel</button>
+                                <button
+                                    type="button"
+                                    className="primary"
+                                    onClick={() => {
+                                        setApiBase(serverUrl);
+                                        setServerUrl(getApiBase());
+                                        setServerOpen(false);
+                                        setError('');
+                                    }}
+                                >
+                                    Save
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <button type="button" className="ws-auth-server-link" onClick={() => { setServerUrl(getApiBase()); setServerOpen(true); }}>
+                            <Icon name="globe" size={12} /> Server: {getApiBase()}
+                        </button>
                     )}
 
                     <p className="ws-auth-footnote">
