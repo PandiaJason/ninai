@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { createUser, changeOwnPassword, hasDefaultAdminPassword, setUserActive, updateOwnProfile, updateUserRole } from '../../services/auth';
+import { createUser, changeOwnPassword, hasDefaultAdminPassword, updateOwnProfile, updateUserRole } from '../../services/auth';
 import {
     addWorkspaceMember,
     createWorkspace,
@@ -8,6 +8,7 @@ import {
     getWorkspaceStats,
     listNonMembers,
     removeWorkspaceMember,
+    setMemberActive,
     updateWorkspace,
     type WorkspaceUser,
 } from '../../services/workspace';
@@ -459,7 +460,7 @@ const PeopleSection: React.FC<{
 
     const toggleActive = async (member: WorkspaceUser) => {
         try {
-            await setUserActive(member.id, member.active !== 1);
+            await setMemberActive(member.id, member.active !== 1);
             toast.success(member.active === 1 ? 'Account deactivated.' : 'Account reactivated.');
             await onChanged();
         } catch (e) {

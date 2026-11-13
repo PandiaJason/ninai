@@ -7,7 +7,8 @@ import {
     type Workspace,
     type MemberRole,
 } from '../db';
-import { requireUser, type SessionUser, publicUser } from './auth';
+import { requireUser, type SessionUser, publicUser, setUserActive } from './auth';
+import { apiRequest } from './api';
 import { AppError } from './errors';
 import { assertWorkspaceAccess, requireAdmin } from './permissions';
 import { optional, required } from './validation';
@@ -251,10 +252,38 @@ export async function removeWorkspaceMember(workspaceId: string, userId: string)
     if (userId === actor.id) throw new AppError('CONFLICT', 'You cannot remove yourself from the workspace.');
     const workspace = await db.workspaces.get(workspaceId);
     if (workspace?.ownerId === userId) throw new AppError('CONFLICT', 'The workspace owner cannot be removed.');
+
+    if (isCloudAccount(userId)) {
+        await apiRequest(`/users/${userId}`, { method: 'DELETE' });
+    }
+
     await db.workspaceMembers
         .where('[workspaceId+userId]')
         .equals([workspaceId, userId])
         .delete();
+}
+
+/**
+ * Deactivates or reactivates a member.
+ *
+ * Cloud accounts are handled on the server, so the change applies to the
+ * account itself and not just to this machine.
+ */
+export async function setMemberActive(userId: string, active: boolean): Promise<void> {
+    if (isCloudAccount(userId)) {
+        if (active) {
+            await apiRequest(`/users/${userId}/restore`, { method: 'POST' });
+        } else {
+            await apiRequest(`/users/${userId}`, { method: 'DELETE' });
+        }
+        return;
+    }
+    await setUserActive(userId, active);
+}
+
+/** Accounts that live on the server carry a uuid; local ones do not. */
+export function isCloudAccount(userId: string): boolean {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
 }
 
 export async function listNonMembers(workspaceId: string): Promise<WorkspaceUser[]> {

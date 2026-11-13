@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
 import { query } from '../db.js';
 import { authenticateToken } from '../middleware/auth.js';
+import { isRevoked } from './users.js';
 
 const router = express.Router();
 
@@ -68,6 +69,11 @@ router.post('/login', loginLimiter, async (req, res) => {
 
     if (!user || !user.is_valid) {
       return res.status(401).json({ error: 'Invalid email or password.' });
+    }
+
+    // An account removed from the workspace cannot sign in again.
+    if (isRevoked(user.email)) {
+      return res.status(403).json({ error: 'This account has been removed from the workspace.' });
     }
 
     const role = roleFor(user);

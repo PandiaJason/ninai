@@ -69,9 +69,16 @@ sudo install -m 600 /dev/null /etc/ninai/api.env
 sudo nano /etc/ninai/api.env     # DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, JWT_SECRET, PORT
 
 # 4b. the RDS certificate bundle, so the database link is verified
-curl -o /etc/ninai/global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+#     Keep it outside /etc/ninai: the sandbox masks that directory, and the
+#     process would not be able to read it from there.
+sudo curl -fsSL -o /etc/ssl/certs/rds-global-bundle.pem \
+  https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+sudo chmod 644 /etc/ssl/certs/rds-global-bundle.pem
 # then add this line to /etc/ninai/api.env:
-#   DB_SSL_CA=/etc/ninai/global-bundle.pem
+#   DB_SSL_CA=/etc/ssl/certs/rds-global-bundle.pem
+
+# 4c. who is an administrator (the users table has no role column yet)
+#   ADMIN_EMAILS=cmo@example.com,ceo@example.com
 
 # 5. nsjail
 git clone --depth 1 https://github.com/google/nsjail.git /tmp/nsjail
@@ -91,6 +98,15 @@ sudo systemctl reload caddy
 `JWT_SECRET` is generated with `openssl rand -hex 32`. Changing it signs
 every one of your team out, so treat it as permanent.
 
+
+## Removing a person
+
+`DELETE /api/users/:id` revokes an account. It is administrator-only, and
+the decision is made on the server from the token the server issued.
+
+Until the `users` table has an `active` column, the removal is recorded in
+`/etc/ninai/revoked.json` — a list of addresses the server refuses to sign
+in. Restore with `POST /api/users/:id/restore`.
 
 ## Everyday commands
 
