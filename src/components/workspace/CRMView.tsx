@@ -1,3 +1,4 @@
+import { AlgoAccounts } from './AlgoAccounts';
 import React, { useMemo, useState } from 'react';
 import type { Lead, LeadAudience, LeadQuality, Priority } from '../../db';
 import { bulkArchiveLeads, bulkDeleteLeads, bulkMoveLeads, downloadLeadsCsv, exportLeadsCsv, listLeadStages, listLeads, moveLeadStage } from '../../services/leads';
@@ -54,6 +55,7 @@ export const CRMView: React.FC<CRMViewProps> = ({
 }) => {
     const { user, members } = useAuth();
     const toast = useToast();
+    const [algoOpen, setAlgoOpen] = useState(false);
     const [view, setView] = useState<ViewMode>(defaultView);
     const [search, setSearch] = useState('');
     const [stageFilter, setStageFilter] = useState('all');
@@ -270,6 +272,7 @@ export const CRMView: React.FC<CRMViewProps> = ({
 
     return (
         <div className="ws-module">
+            {algoOpen && <Drawer open onClose={() => setAlgoOpen(false)} label="ALGO accounts"><AlgoAccounts onClose={() => setAlgoOpen(false)} /></Drawer>}
             <div className="ws-module-inner">
                 <PageHeader
                     title={isLearner ? 'Learners' : 'Institutions'}
@@ -278,6 +281,7 @@ export const CRMView: React.FC<CRMViewProps> = ({
                         : `${audienceLeads.length} institution${audienceLeads.length === 1 ? '' : 's'} · discovery, pilots and signed partnerships.`}
                     actions={(
                         <>
+                            {isLearner && <Button onClick={() => setAlgoOpen(true)}>ALGO accounts</Button>}
                             <Button variant="primary" icon="plus" onClick={() => { setEditing(null); setFormOpen(true); }}>
                                 {isLearner ? 'Add learner' : 'Add institution'}
                             </Button>
