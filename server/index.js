@@ -8,6 +8,7 @@ import notesRoutes from './routes/notes.js';
 import messagesRoutes from './routes/messages.js';
 import migrateRoutes from './routes/migrate.js';
 import usersRoutes from './routes/users.js';
+import algoRoutes from './routes/algo.js';
 
 dotenv.config();
 
@@ -45,6 +46,7 @@ app.use('/api', notesRoutes);
 app.use('/api/messages', messagesRoutes);
 app.use('/api/migrate', migrateRoutes);
 app.use('/api/users', usersRoutes);
+app.use('/api/algo', algoRoutes);
 
 // 404 Route
 app.use((req, res) => {
