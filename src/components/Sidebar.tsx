@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { exportBackup } from '../utils/export';
-import { db } from '../db';
 import type { ModuleId } from '../types/workspace';
 import { Icon, type IconName } from './ui/Icon';
 import './Sidebar.css';
@@ -85,29 +84,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         }
     };
 
-    const handleFactoryReset = async () => {
-        if (confirm("⚠️ FACTORY RESET ⚠️\n\nThis will permanently DELETE ALL your notes and folders.\nAre you sure you want to wipe everything and start over?")) {
-            try {
-                // 1. Close and Delete DB
-                db.close();
-                await db.delete();
-
-                // 2. Clear LocalStorage
-                localStorage.clear();
-
-                // 3. Mark setup as incomplete explicitly
-                localStorage.setItem('ninai_setup_complete', 'false');
-
-                // 4. Force Reload
-                alert("Reset Complete. The app will now reload.");
-                window.location.reload();
-            } catch (e) {
-                alert("Reset failed: " + e);
-                window.location.reload(); // Reload anyway to try and clear locks
-            }
-        }
-    };
-
     return (
         <nav className="sidebar-nav">
             {/* 1. User Profile (Top Left) */}
@@ -185,29 +161,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                 <Icon name="logout" size={16} /> Sign out
                             </button>
                         )}
-
-                        <button
-                            className="menu-item delete"
-                            onClick={handleFactoryReset}
-                            style={{
-                                width: '100%',
-                                marginTop: '4px',
-                                padding: '10px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '8px',
-                                fontSize: '0.9rem',
-                                color: 'var(--accent-danger)',
-                                background: 'rgba(255, 0, 0, 0.05)',
-                                border: '1px solid rgba(255, 0, 0, 0.1)',
-                                borderRadius: '8px',
-                                cursor: 'pointer',
-                                fontWeight: 600
-                            }}
-                        >
-                            ⚠️ Factory Reset
-                        </button>
                     </div>
                     <button className="close-link" onClick={() => setShowProfileMenu(false)}>Close</button>
                 </div>

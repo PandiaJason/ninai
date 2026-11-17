@@ -12,10 +12,6 @@ export const Onboarding: React.FC<OnboardingProps> = () => {
     const handleNewUser = async () => {
         // "Start as New User" = Wipe everything -> Set Flag -> Reload
         // This relies on the main App boot logic (db.ts) to see empty DB and seed defaults.
-        await performReset(true);
-    };
-
-    const performReset = async (isNewUser: boolean) => {
         try {
             console.log("Performing robust reset...");
 
@@ -28,12 +24,8 @@ export const Onboarding: React.FC<OnboardingProps> = () => {
             // 3. Clear Local Storage
             localStorage.clear();
 
-            // 4. Set Flag
-            // If New User: Mark setup complete so they go to Main App
-            // If Troubleshooting: Mark setup incomplete so they stay here (or return to Onboarding)
-            // actually, if troubleshooting, usually better to reload to Onboarding?
-            // User asked for "Factory Reset" -> usually implies start over -> Onboarding.
-            localStorage.setItem('ninai_setup_complete', isNewUser ? 'true' : 'false');
+            // 4. Mark setup complete so the user goes straight to the Main App.
+            localStorage.setItem('ninai_setup_complete', 'true');
 
             // 5. Hard Reload
             // This clears memory state and re-initializes the app fresh.
@@ -130,19 +122,6 @@ export const Onboarding: React.FC<OnboardingProps> = () => {
                             style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
                         />
                     </div>
-                </div>
-
-                <div style={{ marginTop: '24px' }}>
-                    <button
-                        onClick={async () => {
-                            if (confirm("Factory Reset: This will delete ALL local notes and database structure. Are you sure?")) {
-                                await performReset(false);
-                            }
-                        }}
-                        style={{ background: 'none', border: 'none', color: '#d12f2f', fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'underline' }}
-                    >
-                        Trouble starting? Factory Reset
-                    </button>
                 </div>
             </div>
         </div>
