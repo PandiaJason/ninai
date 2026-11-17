@@ -102,7 +102,7 @@ export const LoginScreen: React.FC = () => {
                     )}
 
                     <p className="ws-auth-footnote">
-                        <Icon name="lock" size={12} /> Local-first • accounts are stored on this device
+                        <Icon name="lock" size={12} /> Your account is stored locally on this device
                     </p>
                 </form>
             </div>
