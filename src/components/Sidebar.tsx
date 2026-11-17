@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { exportBackup } from '../utils/export';
-import { db } from '../db';
 import { TOOLS, type Tool } from '../data/tools';
 import type { ModuleId } from '../types/workspace';
 import { Icon, type IconName } from './ui/Icon';
@@ -155,21 +154,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         setNewUrl('');
     };
 
-    const handleFactoryReset = async () => {
-        if (!confirm('Factory reset\n\nThis permanently deletes all your notes, folders and local workspace data. Continue?')) return;
-        try {
-            db.close();
-            await db.delete();
-            localStorage.clear();
-            localStorage.setItem('ninai_setup_complete', 'false');
-            alert('Reset complete. The app will now reload.');
-            window.location.reload();
-        } catch {
-            alert('Reset failed. The app will now reload.');
-            window.location.reload();
-        }
-    };
-
     const selectModule = (module: ModuleId) => {
         setShowProfileMenu(false);
         setIsAdding(false);
@@ -245,11 +229,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                 Sign out
                             </button>
                         )}
-                        <div className="sidebar-popover-divider" />
-                        <button type="button" className="sidebar-menu-button danger" onClick={() => void handleFactoryReset()}>
-                            <Icon name="alert" size={15} />
-                            Factory reset
-                        </button>
+
                     </div>
                 )}
             </div>
