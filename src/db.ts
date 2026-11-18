@@ -500,6 +500,12 @@ export class NinaiDB extends Dexie {
     constructor() {
         super('NinaiDB');
 
+        // Version 12: restore the projectMilestones.workspaceId index that
+        // version 11 dropped; the calendar, workspace and version services query by it.
+        this.version(12).stores({
+            projectMilestones: 'id, workspaceId, projectId, dueDate, completed, [projectId+completed]',
+        });
+
         // Version 11: Gmail connection + learner mail inbox.
         this.version(11).stores({
             notes: 'id, folderId, title, updatedAt, loved, hasReminders, workspaceId, archived, [workspaceId+folderId], [workspaceId+updatedAt]',
