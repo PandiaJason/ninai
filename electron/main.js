@@ -421,7 +421,7 @@ function createWindow() {
             contextIsolation: true,
             preload: path.join(app.getAppPath(), 'electron/preload.js')
         },
-        icon: path.join(app.getAppPath(), 'public/icon.png')
+        icon: path.join(app.getAppPath(), process.platform === 'win32' ? 'build/icon.ico' : 'build/icon.png')
     });
 
     // Load the Vite dev server if in dev mode, else load local file
@@ -452,23 +452,8 @@ app.whenReady().then(() => {
         Menu.setApplicationMenu(null);
     }
 
-    // CRITICAL: Intercept headers to allow embedding
-    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-        const responseHeaders = { ...details.responseHeaders };
-
-        // Remove X-Frame-Options to allow embedding
-        delete responseHeaders['x-frame-options'];
-        delete responseHeaders['X-Frame-Options'];
-
-        // Modify CSP to allow frame ancestors (or remove it)
-        delete responseHeaders['content-security-policy'];
-        delete responseHeaders['Content-Security-Policy'];
-
-        callback({
-            cancel: false,
-            responseHeaders,
-        });
-    });
+    // Tool sites run in <webview>s with their own `persist:<id>` sessions, so the
+    // default session never needs X-Frame-Options / CSP stripped. Leave them intact.
 
     createWindow();
 

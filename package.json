@@ -50,7 +50,7 @@
     "cross-env": "^10.1.0",
     "dexie": "^4.2.1",
     "dexie-react-hooks": "^4.2.0",
-    "electron": "^40.1.0",
+    "electron": "^42.11.18",
     "electron-builder": "^25.1.8",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
@@ -71,7 +71,7 @@
     "appId": "com.ninai.app",
     "productName": "Ninai",
     "mac": {
-      "icon": "public/icon.png",
+      "icon": "build/icon.png",
       "category": "public.app-category.productivity",
       "target": [
         {
@@ -91,7 +91,7 @@
       ]
     },
     "win": {
-      "icon": "public/icon.png",
+      "icon": "build/icon.ico",
       "target": [
         {
           "target": "nsis",
@@ -107,7 +107,7 @@
       "allowToChangeInstallationDirectory": true
     },
     "linux": {
-      "icon": "public/icon.png",
+      "icon": "build/icon.png",
       "target": [
         {
           "target": "AppImage",
@@ -122,7 +122,9 @@
     "files": [
       "dist/**/*",
       "electron/**/*",
-      "package.json"
+      "package.json",
+      "build/icon.ico",
+      "build/icon.png"
     ],
     "directories": {
       "output": "release"
@@ -144,5 +146,9 @@
     "lucide-react": "^1.72.0",
     "marked": "^17.0.1",
     "pg": "^8.23.1"
+  },
+  "allowScripts": {
+    "esbuild@0.27.2": true,
+    "electron@42.11.18": true
   }
 }
