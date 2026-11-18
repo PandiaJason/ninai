@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { hasDefaultAdminPassword } from '../../services/auth';
-import { getApiBase, setApiBase } from '../../services/api';
+import { getApiBase } from '../../services/api';
 import { toErrorMessage } from '../../services/errors';
 import { Button } from '../ui/Misc';
 import { Field, TextInput } from '../ui/Form';
@@ -14,8 +14,6 @@ export const LoginScreen: React.FC = () => {
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    const [serverOpen, setServerOpen] = useState(false);
-    const [serverUrl, setServerUrl] = useState(() => getApiBase());
     const firstRun = hasDefaultAdminPassword();
     // A configured server means the accounts live on the server, so the local
     // first-run default no longer applies.
@@ -53,7 +51,7 @@ export const LoginScreen: React.FC = () => {
             <div className="ws-auth-panel">
                 <form className="ws-auth-card" onSubmit={submit}>
                     <div className="ws-auth-card-head">
-                        <div className="ws-auth-mini-logo">N</div>
+                        <img className="ws-auth-mini-logo" src="./logo.png" alt="NINAI" />
                         <div>
                             <h2>Sign in to NINAI</h2>
                             <p>Use your workspace account.</p>
@@ -99,7 +97,8 @@ export const LoginScreen: React.FC = () => {
                         Sign in
                     </Button>
 
-                    {firstRun && !hasServer && (
+                    {/* The default admin login is only ever shown in local development builds. */}
+                    {import.meta.env.DEV && firstRun && !hasServer && (
                         <div className="ws-auth-hint">
                             <strong>First time?</strong>
                             <span>Default admin: <code>admin@ninai.app</code> / <code>ninai-admin</code></span>
@@ -114,41 +113,10 @@ export const LoginScreen: React.FC = () => {
                         </div>
                     )}
 
-                    {serverOpen ? (
-                        <div className="ws-auth-hint">
-                            <strong>Server address</strong>
-                            <span>The shared API this app signs in to.</span>
-                            <input
-                                className="ws-auth-server-input"
-                                value={serverUrl}
-                                onChange={event => setServerUrl(event.target.value)}
-                                placeholder="http://localhost:3001/api"
-                                aria-label="API address"
-                            />
-                            <div className="sidebar-popover-actions">
-                                <button type="button" onClick={() => setServerOpen(false)}>Cancel</button>
-                                <button
-                                    type="button"
-                                    className="primary"
-                                    onClick={() => {
-                                        setApiBase(serverUrl);
-                                        setServerUrl(getApiBase());
-                                        setServerOpen(false);
-                                        setError('');
-                                    }}
-                                >
-                                    Save
-                                </button>
-                            </div>
-                        </div>
-                    ) : (
-                        <button type="button" className="ws-auth-server-link" onClick={() => { setServerUrl(getApiBase()); setServerOpen(true); }}>
-                            <Icon name="globe" size={12} /> Server: {getApiBase()}
-                        </button>
-                    )}
-
                     <p className="ws-auth-footnote">
-                        <Icon name="lock" size={12} /> Your account is stored locally on this device
+                        <Icon name="lock" size={12} /> {hasServer
+                            ? 'Your account and shared records are stored on your team’s server'
+                            : 'Your account is stored locally on this device'}
                     </p>
                 </form>
             </div>

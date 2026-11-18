@@ -799,7 +799,7 @@
 .ws-auth-panel { display: flex; align-items: center; justify-content: center; padding: 40px; background: #fff; }
 .ws-auth-card { width: 100%; max-width: 390px; display: flex; flex-direction: column; gap: 16px; }
 .ws-auth-card-head { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
-.ws-auth-mini-logo { width: 42px; height: 42px; border-radius: 12px; background: #000; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 18px; }
+.ws-auth-mini-logo { width: 42px; height: 42px; object-fit: contain; flex-shrink: 0; }
 .ws-auth-card-head h2 { font-size: 22px; font-weight: 700; letter-spacing: -0.03em; }
 .ws-auth-card-head p { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
 .ws-auth-submit { height: 44px; width: 100%; margin-top: 4px; font-size: 13px; }

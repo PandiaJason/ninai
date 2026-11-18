@@ -51,8 +51,8 @@ somewhere else:
 **Settings → Server** — paste the API address (for example
 `https://api.your-domain.com/api`) and press **Save**.
 
-The same control sits under the login form, so you can fix it before signing
-in if the server has moved.
+This is only available after signing in. If the server moves, ship a new
+build with the new address baked in.
 
 ## What is stored where
 
